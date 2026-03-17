@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Building2, Sparkles, BarChart3, Users, Download, PlusCircle, Loader2 } from 'lucide-react'
 import SearchForm from '../components/SearchForm'
-import MapPreview from '../components/MapPreview'
+import MassSearch from '../components/MassSearch'
 import BusinessCard from '../components/BusinessCard'
 import CardSkeleton from '../components/CardSkeleton'
 import DuplicateModal from '../components/DuplicateModal'
@@ -27,6 +27,8 @@ export default function SearchPage() {
     const [recentSearches, setRecentSearches] = useState<string[]>(() => {
         try { return JSON.parse(localStorage.getItem('recentSearches') || '[]') } catch { return [] }
     })
+
+    const [searchMode, setSearchMode] = useState<'simple' | 'mass'>('simple')
 
     const createLeadMutation = useCreateLead()
     const { data: storedLeads } = useLeads({ perPage: 1000 })
@@ -61,7 +63,6 @@ export default function SearchPage() {
         localStorage.setItem('recentSearches', JSON.stringify(updated))
 
         try {
-            // Real API Call to Python Backend (FastAPI)
             const response = await searchService.searchBusinesses({
                 query,
                 location,
@@ -78,6 +79,13 @@ export default function SearchPage() {
             setIsLoading(false)
         }
     }, [recentSearches, addToast])
+
+    const handleMassResults = useCallback((results: Business[]) => {
+        setHasSearched(true)
+        setSearchResults(results)
+        setPage(1)
+        addToast(`${results.length} empresas encontradas na busca em massa!`, 'success')
+    }, [addToast])
 
     const captureToDb = async (business: Business) => {
         await createLeadMutation.mutateAsync({
@@ -187,21 +195,45 @@ export default function SearchPage() {
                     </div>
                 )}
 
-                {/* Top section: Form + Map */}
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-8">
-                    {/* Search Form — 40% (2/5) */}
-                    <div className="lg:col-span-2">
+                {/* Search Mode Toggles */}
+                <div className="flex bg-slate-800/50 p-1 rounded-xl w-fit mb-6 border border-slate-700/50">
+                    <button
+                        onClick={() => setSearchMode('simple')}
+                        className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                            searchMode === 'simple' 
+                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                                : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                    >
+                        Busca Simples
+                    </button>
+                    <button
+                        onClick={() => setSearchMode('mass')}
+                        className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                            searchMode === 'mass' 
+                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                                : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                    >
+                        Busca em Massa
+                    </button>
+                </div>
+
+                {/* Top section: Search Forms */}
+                <div className="max-w-4xl mx-auto mb-8">
+                    {searchMode === 'simple' ? (
                         <SearchForm
                             onSearch={handleSearch}
                             isLoading={isLoading}
                             recentSearches={recentSearches}
                         />
-                    </div>
-
-                    {/* Map Preview — 60% (3/5) */}
-                    <div className="lg:col-span-3 min-h-[420px]">
-                        <MapPreview location={currentLocation} />
-                    </div>
+                    ) : (
+                        <MassSearch
+                            onResults={handleMassResults}
+                            isLoading={isLoading}
+                            setIsLoading={setIsLoading}
+                        />
+                    )}
                 </div>
 
                 {/* Results section */}

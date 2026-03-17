@@ -58,6 +58,11 @@ def identify_link_type(url: str, label: str) -> str:
 
 # --- Models ---
 
+class MassSearchRequest(BaseModel):
+    location: str
+    categories: List[str]
+    limit_per_category: int = 20
+
 class AnalysisRequest(BaseModel):
     id: str
     businessName: str
@@ -94,20 +99,14 @@ class Business(BaseModel):
     reviewCount: int = 0
 
 
-@app.get("/api/search/businesses")
-async def search_businesses(
-    query: str = Query(...),
-    location: str = Query(...),
-    radius: int = 5,
-    use_serp: bool = True
-):
-    logger.info(f"Search Request: query='{query}', location='{location}', radius={radius}")
+async def process_search(query: str, location: str, radius: int = 5, use_serp: bool = True):
+    logger.info(f"Processing search: query='{query}', location='{location}', radius={radius}")
     results = []
 
     # --- Try SerpApi first ---
     if use_serp and SERP_API_KEY:
         try:
-            logger.info("Trying SerpApi Google Maps engine: Fetching maximum possible results...")
+            logger.info(f"Trying SerpApi for query: {query}")
             
             start_index = 0
             while True:
@@ -120,7 +119,6 @@ async def search_businesses(
                 })
                 serp_results = search.get_dict()
                 local_results = serp_results.get("local_results", [])
-                logger.info(f"SerpApi returned {len(local_results)} results for start={start_index}")
                 
                 if not local_results:
                     break
@@ -135,7 +133,6 @@ async def search_businesses(
                     if primary_website:
                         links.append(BusinessLink(label=identify_link_type(primary_website, "Website"), url=primary_website))
                     
-                    # Capture extra links from SerpApi (Menu, Order, etc)
                     extra_links = res.get("links", [])
                     if isinstance(extra_links, list):
                         for el in extra_links:
@@ -159,10 +156,11 @@ async def search_businesses(
                         links=links
                     ))
                 
-                # If we got less than 20 results, it means there are no more pages
-                if len(local_results) < 20:
+                if len(local_results) < 20: # Should we maybe limit this for mass search?
                     break
                 start_index += 20
+                if start_index >= 60: # Limit to 3 pages per category to avoid burning credits
+                    break
                     
         except Exception as e:
             logger.error(f"SerpApi Error: {e}")
@@ -170,11 +168,10 @@ async def search_businesses(
     # --- Fallback to Google Places API ---
     if not results:
         try:
-            logger.info("Falling back to Google Places API...")
+            logger.info(f"Falling back to Google Places API for query: {query}")
             geocode = gmaps.geocode(location)
             if not geocode:
-                logger.warning(f"Cannot geocode location: {location}")
-                return {"results": [], "total": 0, "sessionId": str(uuid.uuid4())}
+                return []
 
             loc = geocode[0]["geometry"]["location"]
             address_components = geocode[0].get("address_components", [])
@@ -183,7 +180,6 @@ async def search_businesses(
 
             places_result = gmaps.places(query=query, location=loc, radius=radius * 1000, language="pt-BR")
             places_list = places_result.get("results", [])
-            logger.info(f"Google Places returned {len(places_list)} results")
 
             for place in places_list:
                 results.append(Business(
@@ -199,10 +195,38 @@ async def search_businesses(
                 ))
         except Exception as e:
             logger.error(f"Google Places Error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
 
-    logger.info(f"Total results: {len(results)}")
+    return results
+
+
+@app.get("/api/search/businesses")
+async def search_businesses(
+    query: str = Query(...),
+    location: str = Query(...),
+    radius: int = 5,
+    use_serp: bool = True
+):
+    results = await process_search(query, location, radius, use_serp)
     return {"results": results, "total": len(results), "sessionId": str(uuid.uuid4())}
+
+
+@app.post("/api/mass-search")
+async def mass_search(req: MassSearchRequest):
+    logger.info(f"Mass Search Request: location='{req.location}', categories={len(req.categories)}")
+    all_results = []
+    seen_place_ids = set()
+
+    for idx, category in enumerate(req.categories):
+        logger.info(f"Processing category {idx+1}/{len(req.categories)}: {category}")
+        category_results = await process_search(category, req.location)
+        
+        for res in category_results:
+            if res.place_id not in seen_place_ids:
+                seen_place_ids.add(res.place_id)
+                all_results.append(res)
+    
+    logger.info(f"Mass search completed. Total unique results: {len(all_results)}")
+    return {"results": all_results, "total": len(all_results), "sessionId": str(uuid.uuid4())}
 
 
 @app.post("/api/analyze/site")

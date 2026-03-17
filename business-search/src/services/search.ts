@@ -47,6 +47,15 @@ export const searchService = {
         return data
     },
 
+    /** Mass search multiple categories */
+    async massSearch(location: string, categories: string[]): Promise<SearchResultsResponse> {
+        const { data } = await api.post<SearchResultsResponse>('/mass-search', {
+            location,
+            categories
+        })
+        return data
+    },
+
     /** Paginated search history */
     async getHistory(page = 1, perPage = 10): Promise<PaginatedResponse<SearchHistoryItem>> {
         const { data } = await api.get<PaginatedResponse<SearchHistoryItem>>('/search/history', {
