@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Screenshots (Optional: ignore if you don't want to push 200+ images)
+# screenshots/
+# test_screenshots/
+
+# OS
+.DS_Store
+Thumbs.db

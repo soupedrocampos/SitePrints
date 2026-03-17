@@ -1,0 +1,172 @@
+[
+  {
+    "name": "Famiglia Mancini Trattoria",
+    "website": "http://www.famigliamancini.com.br/",
+    "address": "Rua Avanhandava, 81, Bela Vista - Centro Histórico de São Paulo, São Paulo - SP, 01306-001, Brazil",
+    "phone": "(11) 3256-4320",
+    "rating": 4.7,
+    "place_id": "ChIJfadx80xYzpQRyHnuTnmQmDA",
+    "check_result": {
+      "url": "http://www.famigliamancini.com.br/",
+      "accessible": true,
+      "status_code": 200,
+      "response_time": 1244.15,
+      "error": null
+    },
+    "screenshot": "screenshots/screenshot_20260228_023825.png",
+    "checked_at": "2026-02-28T02:38:09.887611"
+  },
+  {
+    "name": "Vicolo Nostro",
+    "website": "https://vicolonostro.com.br/",
+    "address": "Rua Jataituba, 29 - Cidade Monções, São Paulo - SP, 04704-090, Brazil",
+    "phone": "(11) 5561-5287",
+    "rating": 4.7,
+    "place_id": "ChIJn8NM579QzpQRWT06N8pdDgQ",
+    "check_result": {
+      "url": "https://vicolonostro.com.br/",
+      "accessible": false,
+      "status_code": 406,
+      "response_time": 1072.11,
+      "error": null
+    },
+    "screenshot": null,
+    "checked_at": "2026-02-28T02:38:29.637107"
+  },
+  {
+    "name": "Terraço Itália",
+    "website": "http://www.terracoitalia.com.br/",
+    "address": "Av. Ipiranga, 344 - 41º andar - República, São Paulo - SP, 01046-010, Brazil",
+    "phone": "(11) 2189-2929",
+    "rating": 4.6,
+    "place_id": "ChIJz36TCeJZzpQR4vkgCNah0Dw",
+    "check_result": {
+      "url": "http://www.terracoitalia.com.br/",
+      "accessible": true,
+      "status_code": 200,
+      "response_time": 1507.6,
+      "error": null
+    },
+    "screenshot": "screenshots/screenshot_20260228_023843.png",
+    "checked_at": "2026-02-28T02:38:32.144990"
+  },
+  {
+    "name": "Osteria Generale - Bela Vista",
+    "website": "http://www.generale.com.br/",
+    "address": "R. Dr. Fausto Ferraz, 163 - Bela Vista, São Paulo - SP, 01333-030, Brazil",
+    "phone": "(11) 3253-5572",
+    "rating": 4.7,
+    "place_id": "ChIJzzHeXrlZzpQRO731LSDui34",
+    "check_result": {
+      "url": "http://www.generale.com.br/",
+      "accessible": false,
+      "status_code": null,
+      "response_time": null,
+      "error": "Timeout"
+    },
+    "screenshot": null,
+    "checked_at": "2026-02-28T02:38:57.712499"
+  },
+  {
+    "name": "Modern Mamma Osteria",
+    "website": "http://momaosteria.com.br/",
+    "address": "R. Manuel Guedes, 160 - Itaim Bibi, São Paulo - SP, 04536-070, Brazil",
+    "phone": null,
+    "rating": 4.7,
+    "place_id": "ChIJXXAo52dXzpQRdeK4IWo4W2s",
+    "check_result": {
+      "url": "http://momaosteria.com.br/",
+      "accessible": false,
+      "status_code": 404,
+      "response_time": 1279.69,
+      "error": null
+    },
+    "screenshot": null,
+    "checked_at": "2026-02-28T02:38:59.994675"
+  },
+  {
+    "name": "Hilton Barra Rio de Janeiro",
+    "website": "https://www.hilton.com/en/hotels/rioabhh-hilton-barra-rio-de-janeiro/?SEO_id=GMB-AMER-HH-RIOABHH&y_source=1_MTIxNjk1NzMtNzE1LWxvY2F0aW9uLndlYnNpdGU%3D",
+    "address": "Av. Engenheiro Carlos Carvalho, 1430 - Barra da Tijuca, Rio de Janeiro - RJ, 22775-040, Brazil",
+    "phone": "(21) 3348-1000",
+    "rating": 4.7,
+    "place_id": "ChIJyd9bvX3ZmwARg0FwSGz0WZM",
+    "check_result": {
+      "url": "https://www.hilton.com/en/hotels/rioabhh-hilton-barra-rio-de-janeiro/?SEO_id=GMB-AMER-HH-RIOABHH&y_source=1_MTIxNjk1NzMtNzE1LWxvY2F0aW9uLndlYnNpdGU%3D",
+      "accessible": false,
+      "status_code": 403,
+      "response_time": 1418.27,
+      "error": null
+    },
+    "screenshot": null,
+    "checked_at": "2026-02-28T02:39:08.749788"
+  },
+  {
+    "name": "Hotel Atlântico Business",
+    "website": "https://www.booking.com/hotel/br/atlantico-business.xb.html?aid=8006258&no_rooms=1&group_adults=2&label=atlanticobusiness",
+    "address": "R. Sen. Dantas, 25 - Centro, Rio de Janeiro - RJ, 20031-202, Brazil",
+    "phone": "(21) 3626-7000",
+    "rating": 3.9,
+    "place_id": "ChIJ_4vLdmF_mQARxM9MStynroU",
+    "check_result": {
+      "url": "https://www.booking.com/hotel/br/atlantico-business.xb.html?aid=8006258&no_rooms=1&group_adults=2&label=atlanticobusiness",
+      "accessible": false,
+      "status_code": 202,
+      "response_time": 1406.59,
+      "error": null
+    },
+    "screenshot": null,
+    "checked_at": "2026-02-28T02:39:11.158699"
+  },
+  {
+    "name": "Hotel Nacional Rio de Janeiro",
+    "website": "https://hotelnacionalriodejaneiro.com/",
+    "address": "Av. Niemeyer, 769 - São Conrado, Rio de Janeiro - RJ, 22450-221, Brazil",
+    "phone": "0800 000 1563",
+    "rating": 4.5,
+    "place_id": "ChIJ7f-3y5_WmwARzEMl9WJga-8",
+    "check_result": {
+      "url": "https://hotelnacionalriodejaneiro.com/",
+      "accessible": true,
+      "status_code": 200,
+      "response_time": 636.13,
+      "error": null
+    },
+    "screenshot": "screenshots/screenshot_20260228_023923.png",
+    "checked_at": "2026-02-28T02:39:12.795801"
+  },
+  {
+    "name": "Copacabana Palace, A Belmond Hotel, Rio de Janeiro",
+    "website": "https://www.belmond.com/hotels/south-america/brazil/rio-de-janeiro/belmond-copacabana-palace/?utm_source=local_search&utm_medium=link&utm_campaign=google_business",
+    "address": "Av. Atlântica, 1702 - Copacabana, Rio de Janeiro - RJ, 22021-001, Brazil",
+    "phone": "(21) 2141-8990",
+    "rating": 4.8,
+    "place_id": "ChIJjZJPDlTVmwARroitzBhRLu8",
+    "check_result": {
+      "url": "https://www.belmond.com/hotels/south-america/brazil/rio-de-janeiro/belmond-copacabana-palace/?utm_source=local_search&utm_medium=link&utm_campaign=google_business",
+      "accessible": true,
+      "status_code": 200,
+      "response_time": 1666.01,
+      "error": null
+    },
+    "screenshot": "screenshots/screenshot_20260228_023941.png",
+    "checked_at": "2026-02-28T02:39:28.745859"
+  },
+  {
+    "name": "Por el Mundo Hostel",
+    "website": "https://porelmundohostel.com.br/",
+    "address": "R. da Lapa, 207 - Lapa, RJ, 20021-180, Brazil",
+    "phone": "(21) 99527-5145",
+    "rating": 4.2,
+    "place_id": "ChIJixfp_YZ_mQARbyWGzuRH3-s",
+    "check_result": {
+      "url": "https://porelmundohostel.com.br/",
+      "accessible": false,
+      "status_code": 406,
+      "response_time": 993.78,
+      "error": null
+    },
+    "screenshot": null,
+    "checked_at": "2026-02-28T02:39:46.087817"
+  }
+]

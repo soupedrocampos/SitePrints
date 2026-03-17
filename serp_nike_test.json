@@ -1,0 +1,77 @@
+{
+  "position": 1,
+  "title": "Nike Factory Light",
+  "place_id": "ChIJhcolylNYzpQRF34l3PEd5yU",
+  "data_id": "0x94ce5853ca25ca85:0x25e71df1dc257e17",
+  "data_cid": "2731184623641263639",
+  "reviews_link": "https://serpapi.com/search.json?data_id=0x94ce5853ca25ca85%3A0x25e71df1dc257e17&engine=google_maps_reviews&hl=pt",
+  "photos_link": "https://serpapi.com/search.json?data_id=0x94ce5853ca25ca85%3A0x25e71df1dc257e17&engine=google_maps_photos&hl=pt",
+  "gps_coordinates": {
+    "latitude": -23.5464079,
+    "longitude": -46.6388341
+  },
+  "place_id_search": "https://serpapi.com/search.json?engine=google_maps&google_domain=google.com&hl=pt&place_id=ChIJhcolylNYzpQRF34l3PEd5yU",
+  "provider_id": "/g/12hst79sx",
+  "rating": 4.2,
+  "reviews": 8500,
+  "type": "Loja de artigos esportivos",
+  "types": [
+    "Loja de artigos esportivos",
+    "Loja outlet"
+  ],
+  "type_id": "sporting_goods_store",
+  "type_ids": [
+    "sporting_goods_store",
+    "outlet_store"
+  ],
+  "address": "R. Cel. Xavier de Toledo, 42 - 23 a 27 e - Centro Hist\u00f3rico de, S\u00e3o Paulo - SP, 01048-100, Brasil",
+  "open_state": "Aberto \u00b7 Fecha 21:00",
+  "hours": "Aberto \u00b7 Fecha 21:00",
+  "operating_hours": {
+    "s\u00e1bado": "09:00\u201321:00",
+    "domingo": "11:00\u201317:00",
+    "segunda-feira": "09:00\u201321:00",
+    "ter\u00e7a-feira": "09:00\u201321:00",
+    "quarta-feira": "09:00\u201321:00",
+    "quinta-feira": "09:00\u201321:00",
+    "sexta-feira": "09:00\u201321:00"
+  },
+  "phone": "+55 11 2189-0587",
+  "website": "http://www.nike.com.br/",
+  "extensions": [
+    {
+      "service_options": [
+        "Retirada na loja"
+      ]
+    },
+    {
+      "accessibility": [
+        "Entrada com acessibilidade para pessoas em cadeira de rodas",
+        "Estacionamento com acessibilidade para pessoas em cadeira de rodas"
+      ]
+    },
+    {
+      "planning": [
+        "Visita r\u00e1pida"
+      ]
+    },
+    {
+      "payments": [
+        "Cart\u00e3o de cr\u00e9dito",
+        "Cart\u00e3o de d\u00e9bito",
+        "Pagamentos por dispositivo m\u00f3vel via NFC"
+      ]
+    },
+    {
+      "parking": [
+        "Estacionamento descoberto pago"
+      ]
+    }
+  ],
+  "service_options": {
+    "retirada_na_loja": true
+  },
+  "user_review": "\"Lugar top v\u00e1rios modelos de Nike, vale apena conhecer.\"",
+  "thumbnail": "https://lh3.googleusercontent.com/gps-cs-s/AHVAwep30AHIKy2XqVBZ-lNIvNOZd4gyYoGtJ72ktSyLGzfcqiNcpajihPojhvnZx86SsP0B2hUgrkOUYL-w_980hLRisIKl_5RPKiFcxtcDk0tet7iRuFKukcxMyzlTcMKwOaL7YkQY=w163-h92-k-no",
+  "serpapi_thumbnail": "https://serpapi.com/images/url/KcvrsnicBcHRboIwFADQL6owmKJL9oAxKhaB4TDCizHX2tZ2FO1FwP_zI_Y3nvP_EoiN_XIcLfwRN4Zr1lp2B1Mjq3EE5s_hjSVgiXXC9T7sWOO74Tqig3e47ecV0Un0SNLq_MmH0qxwE3gKd0O8el7gJhNoTlcpMnMVj7rqp5Odzdy5Jwp-V2lRxqQ7zqauiHNpI6qP4zyjcgk9wkK5yDCQebukrYJ-Ozz1L2xpl57ioFQ_5Xf3MfGJmHlEkdq8AT1FRkY"
+}
