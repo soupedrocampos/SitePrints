@@ -70,6 +70,17 @@ export default function LeadsCards({ leads, totalLeads, onView, onEdit, onDelete
                         <button onClick={() => onView(lead)} className="flex-1 py-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600/30 transition-all">
                             <Eye size={12} className="mx-auto" />
                         </button>
+                        <a
+                            href={lead.placesData?.placeId ? `https://www.google.com/maps/place/?q=place_id:${lead.placesData.placeId}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 py-1.5 rounded-lg flex items-center justify-center bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all"
+                            title="Ver no Google Maps"
+                            aria-label={`Ver ${lead.name} no Google Maps`}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <MapPin size={12} />
+                        </a>
                         <button onClick={() => onEdit(lead)} className="flex-1 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 hover:bg-yellow-500/20 transition-all">
                             <Pencil size={12} className="mx-auto" />
                         </button>

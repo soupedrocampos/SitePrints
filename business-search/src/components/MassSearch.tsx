@@ -1,106 +1,262 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { 
-    Search, Play, Pause, X, Check, ChevronsRight, ChevronDown, ChevronRight, 
-    AlertCircle, Layers, Globe, Clock, CheckSquare, Square
-} from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Search, MapPin, ChevronDown, Clock, X, Sliders, Loader2, CheckSquare, Square, Layers, Zap, Turtle } from 'lucide-react'
 import { searchService } from '../services/search'
 import type { Business } from '../types'
-import { useMassSearchStore } from '../store/massSearchStore'
 
-interface CategoryGroup {
-    id: string
-    label: string
-    categories: string[]
+interface MassSearchProps {
+    onResults: (results: Business[], categories: string[], isPartial?: boolean) => void
+    isLoading: boolean
+    setIsLoading: (loading: boolean) => void
+    externalLocation?: string
 }
 
-const CATEGORY_GROUPS: CategoryGroup[] = [
+const CATEGORIES_GROUPS = [
     {
-        id: 'auto',
-        label: 'Automotivo',
-        categories: [
-            'Concessionária de Carros', 'Oficina Mecânica', 'Lava Jato', 
-            'Loja de Pneus', 'Aluguel de Carros', 'Posto de Gasolina'
+        name: 'Automotivo',
+        items: [
+            { id: 'car_dealer', label: 'Concessionária' },
+            { id: 'car_rental', label: 'Aluguel de Carro' },
+            { id: 'car_repair', label: 'Oficina Mecânica' },
+            { id: 'car_wash', label: 'Lava Jato' },
+            { id: 'electric_vehicle_charging_station', label: 'Recarga Veicular' },
+            { id: 'gas_station', label: 'Posto de Gasolina' },
+            { id: 'parking', label: 'Estacionamento' },
+            { id: 'rest_stop', label: 'Parada de Descanso' }
         ]
     },
     {
-        id: 'food',
-        label: 'Alimentação',
-        categories: [
-            'Restaurante', 'Cafeteria', 'Padaria', 'Pizzaria', 'Bar', 
-            'Hamburgueria', 'Sorveteria', 'Supermercado'
+        name: 'Negócios e Profissões',
+        items: [
+            { id: 'accounting', label: 'Contabilidade' },
+            { id: 'corporate_office', label: 'Escritório Corporativo' },
+            { id: 'consultant', label: 'Consultoria' },
+            { id: 'lawyer', label: 'Advogado/Jurídico' },
+            { id: 'real_estate_agency', label: 'Imobiliária' },
+            { id: 'insurance_agency', label: 'Seguradora' },
+            { id: 'bank', label: 'Banco' },
+            { id: 'atm', label: 'Caixa Eletrônico' },
+            { id: 'farm', label: 'Fazenda' },
+            { id: 'ranch', label: 'Rancho' },
+            { id: 'convention_center', label: 'Centro de Convenções' },
+            { id: 'event_venue', label: 'Espaço para Eventos' }
         ]
     },
     {
-        id: 'health',
-        label: 'Saúde',
-        categories: [
-            'Clínica Médica', 'Dentista', 'Farmácia', 'Academia', 
-            'Hospital', 'Laboratório', 'Veterinário', 'Psicólogo'
+        name: 'Cultura e Educação',
+        items: [
+            { id: 'art_gallery', label: 'Galeria de Arte' },
+            { id: 'museum', label: 'Museu' },
+            { id: 'performing_arts_theater', label: 'Teatro' },
+            { id: 'library', label: 'Biblioteca' },
+            { id: 'school', label: 'Escola' },
+            { id: 'university', label: 'Universidade' },
+            { id: 'preschool', label: 'Pré-escola' },
+            { id: 'primary_school', label: 'Ensino Fundamental' },
+            { id: 'secondary_school', label: 'Ensino Médio' }
         ]
     },
     {
-        id: 'professional',
-        label: 'Serviços Profissionais',
-        categories: [
-            'Advogado', 'Contador', 'Imobiliária', 'Agência de Marketing', 
-            'Arquitetura', 'Engenharia', 'TI e Software'
+        name: 'Lazer e Entretenimento',
+        items: [
+            { id: 'amusement_center', label: 'Centro de Diversão' },
+            { id: 'amusement_park', label: 'Parque de Diversão' },
+            { id: 'aquarium', label: 'Aquário' },
+            { id: 'bowling_alley', label: 'Boliche' },
+            { id: 'casino', label: 'Cassino' },
+            { id: 'comedy_club', label: 'Clube de Comédia' },
+            { id: 'movie_theater', label: 'Cinema' },
+            { id: 'night_club', label: 'Balada/Boate' },
+            { id: 'zoo', label: 'Zoológico' },
+            { id: 'water_park', label: 'Parque Aquático' },
+            { id: 'wedding_venue', label: 'Espaço de Casamento' }
         ]
     },
     {
-        id: 'retail',
-        label: 'Varejo',
-        categories: [
-            'Loja de Roupas', 'Loja de Móveis', 'Eletrônicos', 'Pet Shop', 
-            'Livraria', 'Joalheria', 'Floricultura'
+        name: 'Alimentação (Restaurantes)',
+        items: [
+            { id: 'brazilian_restaurant', label: 'Brasileiro' },
+            { id: 'italian_restaurant', label: 'Italiano' },
+            { id: 'japanese_restaurant', label: 'Japonês' },
+            { id: 'chinese_restaurant', label: 'Chinês' },
+            { id: 'mexican_restaurant', label: 'Mexicano' },
+            { id: 'french_restaurant', label: 'Francês' },
+            { id: 'seafood_restaurant', label: 'Frutos do Mar' },
+            { id: 'steak_house', label: 'Churrascaria' },
+            { id: 'pizza_restaurant', label: 'Pizzaria' },
+            { id: 'hamburger_restaurant', label: 'Hamburgueria' },
+            { id: 'sushi_restaurant', label: 'Sushi' },
+            { id: 'ramen_restaurant', label: 'Ramen' },
+            { id: 'mediterranean_restaurant', label: 'Mediterrâneo' },
+            { id: 'middle_eastern_restaurant', label: 'Árabe' },
+            { id: 'thai_restaurant', label: 'Tailandês' },
+            { id: 'vegan_restaurant', label: 'Vegano' },
+            { id: 'vegetarian_restaurant', label: 'Vegetariano' }
         ]
     },
     {
-        id: 'beauty',
-        label: 'Beleza e Bem-Estar',
-        categories: [
-            'Salão de Beleza', 'Barbearia', 'Spa', 'Estética'
+        name: 'Alimentação (Cafés e Outros)',
+        items: [
+            { id: 'bakery', label: 'Padaria' },
+            { id: 'cafe', label: 'Café' },
+            { id: 'coffee_shop', label: 'Cafeteria' },
+            { id: 'bar', label: 'Bar' },
+            { id: 'pub', label: 'Pub' },
+            { id: 'wine_bar', label: 'Wine Bar' },
+            { id: 'donut_shop', label: 'Donuts' },
+            { id: 'ice_cream_shop', label: 'Sorveteria' },
+            { id: 'candy_store', label: 'Doceira' },
+            { id: 'juice_shop', label: 'Casa de Sucos' },
+            { id: 'acai_shop', label: 'Açaí' }
         ]
     },
     {
-        id: 'education',
-        label: 'Educação',
-        categories: [
-            'Escola', 'Faculdade', 'Curso de Idiomas', 'Escola de Música'
+        name: 'Saúde e Bem-estar',
+        items: [
+            { id: 'dentist', label: 'Dentista' },
+            { id: 'doctor', label: 'Médico' },
+            { id: 'hospital', label: 'Hospital' },
+            { id: 'pharmacy', label: 'Farmácia' },
+            { id: 'chiropractor', label: 'Quiroprata' },
+            { id: 'physiotherapist', label: 'Fisioterapeuta' },
+            { id: 'spa', label: 'Spa' },
+            { id: 'wellness_center', label: 'Bem-estar' },
+            { id: 'yoga_studio', label: 'Yoga' },
+            { id: 'skin_care_clinic', label: 'Clínica de Estética' }
         ]
     },
     {
-        id: 'home',
-        label: 'Casa e Construção',
-        categories: [
-            'Loja de Material de Construção', 'Marcenaria', 'Pintura', 
-            'Eletricista', 'Encanador', 'Decoração'
+        name: 'Serviços Pessoais',
+        items: [
+            { id: 'beauty_salon', label: 'Salão de Beleza' },
+            { id: 'barber_shop', label: 'Barbearia' },
+            { id: 'hair_care', label: 'Cabelereiro' },
+            { id: 'nail_salon', label: 'Manicure/Nail Salon' },
+            { id: 'laundry', label: 'Lavanderia' },
+            { id: 'veterinary_care', label: 'Veterinário' },
+            { id: 'pet_store', label: 'Pet Shop' },
+            { id: 'child_care', label: 'Creche/Cuidado Infantil' },
+            { id: 'florist', label: 'Floricultura' },
+            { id: 'tailor', label: 'Costureiro' },
+            { id: 'locksmith', label: 'Chaveiro' },
+            { id: 'moving_company', label: 'Mudanças' },
+            { id: 'plumber', label: 'Encanador' },
+            { id: 'electrician', label: 'Eletricista' },
+            { id: 'painter', label: 'Pintor' },
+            { id: 'roofing_contractor', label: 'Telhadista/Calheiro' },
+            { id: 'storage', label: 'Depósito/Self Storage' }
+        ]
+    },
+    {
+        name: 'Compras',
+        items: [
+            { id: 'shopping_mall', label: 'Shopping' },
+            { id: 'supermarket', label: 'Supermercado' },
+            { id: 'grocery_store', label: 'Mercado/Mercearia' },
+            { id: 'butcher_shop', label: 'Açougue' },
+            { id: 'liquor_store', label: 'Adega/Bebidas' },
+            { id: 'clothing_store', label: 'Loja de Roupas' },
+            { id: 'shoe_store', label: 'Sapataria' },
+            { id: 'jewelry_store', label: 'Joalheria' },
+            { id: 'electronics_store', label: 'Eletrônicos' },
+            { id: 'cell_phone_store', label: 'Loja de Celular' },
+            { id: 'furniture_store', label: 'Móveis' },
+            { id: 'home_goods_store', label: 'Artigos para Casa' },
+            { id: 'hardware_store', label: 'Ferragens' },
+            { id: 'home_improvement_store', label: 'Material de Construção' },
+            { id: 'bicycle_store', label: 'Loja de Bicicleta' },
+            { id: 'book_store', label: 'Livraria' },
+            { id: 'gift_shop', label: 'Loja de Presentes' },
+            { id: 'sporting_goods_store', label: 'Artigos Esportivos' }
+        ]
+    },
+    {
+        name: 'Hospedagem',
+        items: [
+            { id: 'hotel', label: 'Hotel' },
+            { id: 'motel', label: 'Motel' },
+            { id: 'resort_hotel', label: 'Resort' },
+            { id: 'guest_house', label: 'Pousada' },
+            { id: 'bed_and_breakfast', label: 'B&B' },
+            { id: 'hostel', label: 'Albergue/Hostel' }
+        ]
+    },
+    {
+        name: 'Governo e Utilidades',
+        items: [
+            { id: 'city_hall', label: 'Prefeitura' },
+            { id: 'courthouse', label: 'Fórum' },
+            { id: 'embassy', label: 'Embaixada' },
+            { id: 'fire_station', label: 'Bombeiros' },
+            { id: 'police', label: 'Polícia' },
+            { id: 'post_office', label: 'Correios' }
+        ]
+    },
+    {
+        name: 'Viagem e Transp.',
+        items: [
+            { id: 'airport', label: 'Aeroporto' },
+            { id: 'bus_station', label: 'Rodoviária' },
+            { id: 'train_station', label: 'Estação de Trem' },
+            { id: 'subway_station', label: 'Metrô' },
+            { id: 'taxi_stand', label: 'Ponto de Táxi' },
+            { id: 'travel_agency', label: 'Agência de Viagem' }
         ]
     }
 ]
 
-interface MassSearchProps {
-    onResults: (results: Business[], total: number, sessionId: string, isPartial?: boolean) => void
-    isLoading: boolean
-    setIsLoading: (loading: boolean) => void
-    location: string
+const ALL_CATEGORIES = [...new Set(CATEGORIES_GROUPS.flatMap(g => g.items.map(i => i.id)))]
+
+/* ─── CEP regex ─────── */
+const CEP_RE = /^\d{5}-?\d{3}$/
+
+/* ─── ViaCEP response ── */
+interface ViaCEPResponse {
+    localidade: string
+    uf: string
+    erro?: boolean
 }
 
-export function MassSearch({ onResults, isLoading, setIsLoading, location }: MassSearchProps) {
-    const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-    const [expandedGroups, setExpandedGroups] = useState<string[]>(CATEGORY_GROUPS.map(g => g.id))
-    const [useFreeScraper, setUseFreeScraper] = useState(true)
+/* ─── Suggestion item ── */
+interface Suggestion {
+    label: string
+    sublabel?: string
+}
+
+const CITIES: Suggestion[] = [
+    { label: 'São Paulo', sublabel: 'SP' },
+    { label: 'Rio de Janeiro', sublabel: 'RJ' },
+    { label: 'Belo Horizonte', sublabel: 'MG' },
+    { label: 'Curitiba', sublabel: 'PR' },
+    { label: 'Porto Alegre', sublabel: 'RS' },
+    { label: 'Salvador', sublabel: 'BA' },
+    { label: 'Fortaleza', sublabel: 'CE' },
+    { label: 'Recife', sublabel: 'PE' },
+    { label: 'Barueri', sublabel: 'SP' },
+    { label: 'Osasco', sublabel: 'SP' },
+    { label: 'Guarulhos', sublabel: 'SP' },
+]
+
+export default function MassSearch({ onResults, isLoading, setIsLoading, externalLocation = '' }: MassSearchProps) {
+    const [searchParams, setSearchParams] = useSearchParams()
+    const [selectedCategories, setSelectedCategories] = useState<string[]>(
+        searchParams.get('categories')?.split(',').filter(Boolean) || []
+    )
+    const [useFreeScraper, setUseFreeScraper] = useState(false)
     
-    // Resume/Pause State
+    // Search control state
+    const [progress, setProgress] = useState({ current: 0, total: 0 })
     const [isPaused, setIsPaused] = useState(false)
-    const [currentCategoryIndex, setCurrentCategoryIndex] = useState(-1)
     const [accumulatedResults, setAccumulatedResults] = useState<Business[]>([])
-    const [currentSessionId, setCurrentSessionId] = useState<string>('')
-    
-    // Refs to avoid stale closures in loops
-    const isPausedRef = useRef(false)
+    const [currentIndex, setCurrentIndex] = useState(0)
+
     const isRunningRef = useRef(false)
-    const currentResultsRef = useRef<Business[]>([])
-    const seenPlaceIdsRef = useRef<Set<string>>(new Set())
+    const isPausedRef = useRef(false)
+    const accumulatedRef = useRef<Business[]>([])
+    const seenIdsRef = useRef(new Set<string>())
+    const hasAutoRunRef = useRef(false)
+
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const toggleCategory = (cat: string) => {
         setSelectedCategories(prev => 
@@ -108,330 +264,305 @@ export function MassSearch({ onResults, isLoading, setIsLoading, location }: Mas
         )
     }
 
-    const toggleGroup = (group: CategoryGroup) => {
-        const allInGroup = group.categories.every(cat => selectedCategories.includes(cat))
-        if (allInGroup) {
-            setSelectedCategories(prev => prev.filter(cat => !group.categories.includes(cat)))
+    const toggleAll = () => {
+        if (selectedCategories.length === ALL_CATEGORIES.length) {
+            setSelectedCategories([])
         } else {
-            setSelectedCategories(prev => {
-                const newCats = [...prev]
-                group.categories.forEach(cat => {
-                    if (!newCats.includes(cat)) newCats.push(cat)
-                })
-                return newCats
-            })
+            setSelectedCategories([...ALL_CATEGORIES])
         }
     }
 
-    const selectAll = () => {
-        const allCats = CATEGORY_GROUPS.flatMap(g => g.categories)
-        setSelectedCategories(allCats)
+    const toggleGroup = (groupIdIds: string[]) => {
+        const allInGroupSelected = groupIdIds.every(id => selectedCategories.includes(id))
+        if (allInGroupSelected) {
+            setSelectedCategories(prev => prev.filter(id => !groupIdIds.includes(id)))
+        } else {
+            const newSelection = new Set([...selectedCategories, ...groupIdIds])
+            setSelectedCategories(Array.from(newSelection))
+        }
     }
 
-    const clearSelection = () => {
-        setSelectedCategories([])
-        setAccumulatedResults([])
-        seenPlaceIdsRef.current = new Set()
-    }
-
-    const handleSearch = async () => {
-        if (!location || selectedCategories.length === 0) return
+    const handleSearch = useCallback(async (resume = false) => {
+        if (!externalLocation.trim() || selectedCategories.length === 0) return
         
         setIsLoading(true)
         setIsPaused(false)
         isPausedRef.current = false
         isRunningRef.current = true
-        
-        // Reset or initialize session
-        const sessionId = currentSessionId || `mass-${Date.now()}`
-        if (!currentSessionId) {
-            setCurrentSessionId(sessionId)
-            setAccumulatedResults([])
-            currentResultsRef.current = []
-            seenPlaceIdsRef.current = new Set()
+
+        const startIdx = resume ? currentIndex : 0
+        if (!resume) {
+            accumulatedRef.current = []
+            seenIdsRef.current = new Set()
+            setCurrentIndex(0)
+            setProgress({ current: 0, total: selectedCategories.length })
         }
 
-        const startIndex = currentCategoryIndex === -1 ? 0 : currentCategoryIndex
-        
         try {
-            for (let i = startIndex; i < selectedCategories.length; i++) {
-                // Check if paused
-                if (isPausedRef.current) {
-                    setCurrentCategoryIndex(i)
-                    isRunningRef.current = false
-                    setIsLoading(false)
-                    return
-                }
+            for (let i = startIdx; i < selectedCategories.length; i++) {
+                if (isPausedRef.current) break
 
-                const cat = selectedCategories[i]
-                setCurrentCategoryIndex(i)
+                const category = selectedCategories[i]
+                setCurrentIndex(i)
+                setProgress({ current: i, total: selectedCategories.length })
 
                 try {
-                    const response = await searchService.searchBusinesses({
-                        query: cat,
-                        location,
-                        radius: 5,
-                        useFreeScraper
+                    const data = await searchService.searchBusinesses({
+                        query: category,
+                        location: externalLocation,
+                        useFreeScraper,
+                        radius: 5
                     })
 
-                    // De-duplicate results
-                    const newUniqueResults: Business[] = []
-                    response.results.forEach(item => {
-                        if (!seenPlaceIdsRef.current.has(item.place_id)) {
-                            seenPlaceIdsRef.current.add(item.place_id)
-                            newUniqueResults.push(item)
+                    data.results.forEach(res => {
+                        if (!seenIdsRef.current.has(res.place_id)) {
+                            seenIdsRef.current.add(res.place_id)
+                            accumulatedRef.current.push(res)
                         }
                     })
-
-                    if (newUniqueResults.length > 0) {
-                        const updated = [...currentResultsRef.current, ...newUniqueResults]
-                        currentResultsRef.current = updated
-                        setAccumulatedResults(updated)
-                        // Send partial results to parent
-                        onResults(updated, updated.length, sessionId, true)
-                    }
+                    
+                    // Update state for UI visibility but keep ref for logic
+                    setAccumulatedResults([...accumulatedRef.current])
+                    
+                    // Send partial results to SearchPage
+                    onResults(accumulatedRef.current, selectedCategories, true)
                 } catch (err) {
-                    console.error(`Error searching ${cat}:`, err)
+                    console.error(`Error searching category ${category}:`, err)
                 }
-                
-                // Small delay to prevent rate limit and allow state updates
-                await new Promise(r => setTimeout(r, 500))
             }
 
-            // Finished all categories
-            setIsLoading(false)
-            setCurrentCategoryIndex(-1)
-            setCurrentSessionId('')
-            isRunningRef.current = false
-            onResults(currentResultsRef.current, currentResultsRef.current.length, sessionId, false)
-            
+            if (!isPausedRef.current) {
+                onResults(accumulatedRef.current, selectedCategories, false)
+                setIsLoading(false)
+                isRunningRef.current = false
+                setProgress({ current: 0, total: 0 })
+            }
         } catch (error) {
-            console.error('Mass search error:', error)
+            console.error('Mass search failed:', error)
             setIsLoading(false)
             isRunningRef.current = false
         }
-    }
+    }, [externalLocation, selectedCategories, useFreeScraper, onResults, setIsLoading])
 
     const handlePause = () => {
-        isPausedRef.current = true
         setIsPaused(true)
+        isPausedRef.current = true
+        setIsLoading(false)
     }
 
     const handleCancel = () => {
-        isRunningRef.current = false
-        isPausedRef.current = false
         setIsPaused(false)
+        isPausedRef.current = false
         setIsLoading(false)
-        setCurrentCategoryIndex(-1)
-        setCurrentSessionId('')
+        isRunningRef.current = false
+        setProgress({ current: 0, total: 0 })
+        setCurrentIndex(0)
+        accumulatedRef.current = []
+        seenIdsRef.current = new Set()
         setAccumulatedResults([])
-        seenPlaceIdsRef.current = new Set()
     }
 
-    const progress = selectedCategories.length > 0 
-        ? Math.round(((currentCategoryIndex + 1) / selectedCategories.length) * 100) 
-        : 0
+    useEffect(() => {
+        if (
+            !hasAutoRunRef.current &&
+            searchParams.get('run') === '1' &&
+            searchParams.get('mass') === 'true' &&
+            externalLocation &&
+            selectedCategories.length > 0
+        ) {
+            hasAutoRunRef.current = true
+            handleSearch()
+            const next = new URLSearchParams(searchParams)
+            next.delete('run')
+            setSearchParams(next, { replace: true })
+        }
+    }, [searchParams, externalLocation, selectedCategories, handleSearch, setSearchParams])
 
     return (
-        <div className="space-y-6">
-            {/* Action Top Bar */}
-            <div className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-200/60 dark:border-slate-700/60 transition-all duration-300">
-                <div className="space-y-6">
-                    {/* Controls Row */}
-                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                        <div className="flex flex-wrap items-center gap-3">
-                            <button
-                                onClick={() => setUseFreeScraper(!useFreeScraper)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                                    useFreeScraper 
-                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
-                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                                }`}
-                            >
-                                <Globe className="w-4 h-4" />
-                                <span>Raspador Gratuito</span>
-                                <div className={`w-8 h-4 rounded-full relative transition-colors ${useFreeScraper ? 'bg-blue-400' : 'bg-slate-400'}`}>
-                                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${useFreeScraper ? 'right-0.5' : 'left-0.5'}`} />
-                                </div>
-                            </button>
-
-                            {useFreeScraper && (
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/30 rounded-lg text-amber-700 dark:text-amber-400 text-xs animate-in slide-in-from-left-2 duration-300">
-                                    <Clock className="w-3.5 h-3.5" />
-                                    <span>Busca gratuita é mais lenta (~2-3 min por categoria)</span>
-                                </div>
-                            )}
-                        </div>
-
-                        {!useFreeScraper && selectedCategories.length > 0 && (
-                            <div className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 text-indigo-500" />
-                                <span>Previsão: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{selectedCategories.length * 20}</span> créditos</span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                        {!isLoading && !isPaused ? (
-                            <button
-                                onClick={handleSearch}
-                                disabled={selectedCategories.length === 0 || !location}
-                                className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-xl shadow-blue-500/25 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 disabled:hover:scale-100 group"
-                            >
-                                <Play className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                Realizar Busca em Massa
-                            </button>
-                        ) : (
-                            <>
-                                {isLoading ? (
-                                    <button
-                                        onClick={handlePause}
-                                        className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-amber-500 text-white rounded-xl font-semibold shadow-lg shadow-amber-500/20 hover:bg-amber-600 transition-all"
-                                    >
-                                        <Pause className="w-5 h-5" />
-                                        Pausar Tudo
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={handleSearch}
-                                        className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-green-500 text-white rounded-xl font-semibold shadow-lg shadow-green-500/20 hover:bg-green-600 transition-all"
-                                    >
-                                        <Play className="w-5 h-5" />
-                                        Retomar
-                                    </button>
-                                )}
-                                <button
-                                    onClick={handleCancel}
-                                    className="px-4 py-3 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
-                                    title="Cancelar busca e limpar progresso"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </>
-                        )}
-
-                        <div className="flex-1 flex gap-2">
-                            <button
-                                onClick={selectAll}
-                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
-                            >
-                                Selecionar Tudo
-                            </button>
-                            <button
-                                onClick={clearSelection}
-                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
-                            >
-                                Limpar
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Progress Area */}
-                    {(isLoading || isPaused || isRunningRef.current) && (
-                        <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-700/50 animate-in fade-in slide-in-from-top-2 duration-500">
-                            <div className="flex items-center justify-between text-sm">
-                                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
-                                    {isLoading ? (
-                                        <div className="flex gap-1.5 h-4 items-center">
-                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" />
-                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-150" />
-                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-300" />
-                                        </div>
-                                    ) : (
-                                        <Pause className="w-4 h-4 text-amber-500" />
-                                    )}
-                                    <span className="font-medium">
-                                        {isPaused ? 'Busca pausada' : `Processando: "${selectedCategories[currentCategoryIndex]}"`}
-                                    </span>
-                                </div>
-                                <div className="font-mono text-xs flex gap-4">
-                                    <span>{currentCategoryIndex + 1} de {selectedCategories.length} categorias</span>
-                                    <span className="text-blue-600 dark:text-blue-400 font-bold">{accumulatedResults.length} leads únicos</span>
-                                </div>
-                            </div>
-                            <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                <div 
-                                    className={`h-full transition-all duration-700 ease-out rounded-full ${isPaused ? 'bg-amber-400' : 'bg-gradient-to-r from-blue-500 to-indigo-600 shadow-[0_0_12px_rgba(59,130,246,0.5)]'}`}
-                                    style={{ width: `${progress}%` }}
-                                />
-                            </div>
-                        </div>
+        <div className="glass rounded-2xl p-6 flex flex-col gap-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                        <Layers size={18} className="text-indigo-400" />
+                        Busca em Massa
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Selecione múltiplas categorias para uma busca completa</p>
+                </div>
+                
+                <button 
+                    onClick={toggleAll}
+                    className="flex items-center gap-2 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/20"
+                >
+                    {selectedCategories.length === ALL_CATEGORIES.length ? (
+                        <>
+                            <CheckSquare size={14} />
+                            Desmarcar Todos
+                        </>
+                    ) : (
+                        <>
+                            <Square size={14} />
+                            Selecionar Todos
+                        </>
                     )}
+                </button>
+            </div>
+
+            {/* Free Scraper Toggle (Moved Up) */}
+            <button
+                type="button"
+                aria-pressed={useFreeScraper}
+                aria-label="Usar raspador gratuito"
+                className="flex items-center justify-between w-full p-4 rounded-xl border border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-800/50 transition-colors text-left"
+                onClick={() => setUseFreeScraper(!useFreeScraper)}
+            >
+                <div className="flex gap-3 items-center">
+                    <div className={`p-2.5 rounded-lg transition-colors ${useFreeScraper ? 'bg-amber-500/20 text-amber-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
+                        {useFreeScraper ? <Turtle size={18} /> : <Zap size={18} />}
+                    </div>
+                    <div>
+                        <h4 className="text-sm font-semibold text-white">Usar Raspador Gratuito (Econômico)</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                            {useFreeScraper 
+                                ? "Busca demorada (2 a 5 minutos), mas não gasta créditos." 
+                                : "Busca rápida usando a API oficial. Consome créditos."}
+                        </p>
+                    </div>
+                </div>
+                <div className={`w-10 h-5 rounded-full relative transition-colors ${useFreeScraper ? 'bg-amber-500' : 'bg-slate-600'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 shadow-sm transition-all ${useFreeScraper ? 'left-[22px]' : 'left-0.5'}`} />
+                </div>
+            </button>
+
+            {/* Warning Info */}
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3 items-start">
+                <div className="p-1 px-2 bg-amber-500/20 rounded-lg text-amber-500 font-bold text-xs">!</div>
+                <div className="space-y-1">
+                    <p className="text-xs font-semibold text-amber-400">Aviso de Créditos</p>
+                    <p className="text-[11px] text-slate-400">
+                        Cada categoria selecionada ({selectedCategories.length}) realizará uma busca independente. 
+                        Isso consumirá créditos da API proporcionalmente ao número de categorias.
+                    </p>
                 </div>
             </div>
 
-            {/* Category Grid Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {CATEGORY_GROUPS.map(group => {
-                    const isExpanded = expandedGroups.includes(group.id)
-                    const groupSelectedCount = group.categories.filter(cat => selectedCategories.includes(cat)).length
-                    const isAllSelected = groupSelectedCount === group.categories.length
-                    const isPartial = groupSelectedCount > 0 && !isAllSelected
+            {/* Action Area: Clear & Run */}
+            <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                    onClick={() => setSelectedCategories([])}
+                    className="flex-1 py-3 px-6 rounded-xl border border-slate-700 text-slate-400 font-medium text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                >
+                    <X size={16} /> Limpar Seleção
+                </button>
 
+                {isLoading ? (
+                    <button
+                        onClick={handlePause}
+                        className="flex-1 py-3 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                        <Turtle size={18} className="animate-bounce" /> Pausar Tudo
+                    </button>
+                ) : isPaused ? (
+                    <div className="flex-[2] flex gap-2">
+                        <button
+                            onClick={handleCancel}
+                            className="flex-1 py-3 px-4 rounded-xl border border-red-500/30 text-red-400 font-medium text-sm hover:bg-red-500/10 transition-all flex items-center justify-center gap-2"
+                        >
+                             Cancelar
+                        </button>
+                        <button
+                            onClick={() => handleSearch(true)}
+                            className="flex-[2] py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
+                        >
+                            <Zap size={18} /> Retomar ({selectedCategories.length - currentIndex} restantes)
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => handleSearch(false)}
+                        disabled={selectedCategories.length === 0 || !externalLocation.trim()}
+                        className="flex-[2] py-3 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm shadow-lg shadow-indigo-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                    >
+                        <Layers size={18} /> Iniciar Busca ({selectedCategories.length})
+                    </button>
+                )}
+            </div>
+
+            {/* Progress Bar (Visual Only while running or paused) */}
+            {(isLoading || isPaused) && (
+                <div className="mt-2 space-y-2 mb-6">
+                    <div className="flex justify-between text-[10px] font-medium uppercase tracking-wider">
+                        <span className={isPaused ? "text-amber-400" : "text-indigo-400"}>
+                            {isPaused ? "Busca Pausada" : "Processando Categorias..."}
+                        </span>
+                        <span className="text-slate-500">{currentIndex + 1} / {selectedCategories.length}</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                            className={`h-full transition-all duration-500 ${isPaused ? "bg-amber-500" : "bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"}`}
+                            style={{ width: `${((currentIndex + 1) / selectedCategories.length) * 100}%` }}
+                        />
+                    </div>
+                    <p className="text-[10px] text-slate-500 text-center italic">
+                        {accumulatedResults.length} leads únicos encontrados até agora.
+                    </p>
+                </div>
+            )}
+
+            <div className="border-t border-slate-700/50 pt-6"></div>
+
+            {/* Categories Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {CATEGORIES_GROUPS.map((group) => {
+                    const groupIds = group.items.map(i => i.id)
+                    const allInGroupSelected = groupIds.every(id => selectedCategories.includes(id))
+                    
                     return (
-                        <div key={group.id} className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/5 group/card">
-                            <div className="p-4 border-b border-slate-200/40 dark:border-slate-700/40 bg-slate-50/50 dark:bg-slate-900/20 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        onClick={() => toggleGroup(group)}
-                                        className={`p-1.5 rounded-lg transition-all ${
-                                            isAllSelected ? 'bg-indigo-600 text-white' : 
-                                            isPartial ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40' : 
-                                            'bg-slate-200 dark:bg-slate-700 text-slate-400'
-                                        }`}
-                                    >
-                                        {isAllSelected ? <CheckSquare className="w-4 h-4" /> : 
-                                         isPartial ? <Square className="w-4 h-4 opacity-50" /> :
-                                         <Square className="w-4 h-4" />}
-                                    </button>
-                                    <h3 className="font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-                                        {group.label}
-                                        {groupSelectedCount > 0 && (
-                                            <span className="ml-2 text-xs px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-full font-medium">
-                                                {groupSelectedCount}
-                                            </span>
-                                        )}
-                                    </h3>
-                                </div>
-                                <button
-                                    onClick={() => setExpandedGroups(prev => 
-                                        prev.includes(group.id) ? prev.filter(id => id !== group.id) : [...prev, group.id]
-                                    )}
-                                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                        <div key={group.name} className="space-y-3">
+                            <div className="flex items-center justify-between pr-2">
+                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1 border-l-2 border-indigo-500/50">
+                                    {group.name}
+                                </h3>
+                                <button 
+                                    onClick={() => toggleGroup(groupIds)}
+                                    className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all ${
+                                        allInGroupSelected 
+                                            ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-400' 
+                                            : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300'
+                                    }`}
                                 >
-                                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                    {allInGroupSelected ? 'Desmarcar' : 'Selecionar'}
                                 </button>
                             </div>
-                            
-                            {isExpanded && (
-                                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in duration-300">
-                                    {group.categories.map(cat => {
-                                        const isSelected = selectedCategories.includes(cat)
-                                        return (
-                                            <button
-                                                key={cat}
-                                                onClick={() => toggleCategory(cat)}
-                                                className={`flex items-center gap-2 p-2 rounded-xl text-xs sm:text-sm transition-all duration-200 text-left border ${
-                                                    isSelected 
-                                                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-medium' 
-                                                    : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900/40'
-                                                }`}
-                                            >
-                                                <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center ${
-                                                    isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600'
-                                                }`}>
-                                                    {isSelected && <Check className="w-3 h-3" />}
-                                                </div>
-                                                <span className="truncate">{cat}</span>
-                                            </button>
-                                        )
-                                    })}
-                                </div>
-                            )}
+                            <div className="grid grid-cols-2 gap-2">
+                            {group.items.map((cat) => {
+                                const active = selectedCategories.includes(cat.id)
+                                return (
+                                    <button
+                                        key={cat.id}
+                                        onClick={() => toggleCategory(cat.id)}
+                                        className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl border transition-all text-left ${
+                                            active
+                                                ? 'bg-indigo-600/30 border-indigo-500/60 text-indigo-300'
+                                                : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+                                        }`}
+                                    >
+                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                            active ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'
+                                        }`}>
+                                            {active && <div className="w-2 h-2 bg-white rounded-full" />}
+                                        </div>
+                                        <span className="truncate">{cat.label}</span>
+                                    </button>
+                                )
+                            })}
+                            </div>
                         </div>
                     )
                 })}
             </div>
+
+
         </div>
     )
 }
