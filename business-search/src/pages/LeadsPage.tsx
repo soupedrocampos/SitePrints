@@ -33,6 +33,7 @@ const ALL_COL_LABELS: Record<string, string> = {
 export default function LeadsPage() {
     const [page, setPage] = useState(1)
     const [perPage, setPerPage] = useState(10)
+
     const [searchParams] = useSearchParams()
     const urlSessionId = searchParams.get('search')
 
