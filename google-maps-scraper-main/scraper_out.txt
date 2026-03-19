@@ -1,0 +1,18 @@
+ÔòöÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòù
+Ôòæ ­ƒîì Google Maps Scraper                                                       Ôòæ
+Ôòæ Ô¡É If you find this project useful, please star it on GitHub: https://github Ôòæ
+Ôòæ .com/gosom/google-maps-scraper                                               Ôòæ
+Ôòæ ­ƒÆû Consider sponsoring to support development: https://github.com/sponsors/g Ôòæ
+Ôòæ osom                                                                         Ôòæ
+ÔòÜÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòÉÔòØ
+
+2026/03/18 23:17:34 INFO Downloading browsers...
+2026/03/18 23:17:35 INFO Downloaded browsers successfully
+{"level":"info","component":"scrapemate","time":"2026-03-19T02:17:37.3202233Z","message":"starting scrapemate"}
+{"level":"info","component":"scrapemate","job":"Job{ID: cdf0ccc8-4bbc-43be-a6f2-96b8ffcf63db, Method: GET, URL: https://www.google.com/maps/search/cafe+in+athens, UrlParams: map[hl:pt-BR]}","error":"Frame.Goto https://www.google.com/maps/search/cafe+in+athens?hl=pt-BR: playwright: target closed: Target page, context or browser has been closed","status":"failed","duration":41791.821,"time":"2026-03-19T02:18:19.1120443Z","message":"job finished"}
+{"level":"error","component":"scrapemate","error":"Frame.Goto https://www.google.com/maps/search/cafe+in+athens?hl=pt-BR: playwright: target closed: Target page, context or browser has been closed","time":"2026-03-19T02:18:19.1120443Z","message":"error while processing job"}
+{"level":"info","component":"scrapemate","job":"Job{ID: ed875895-35e1-40ec-ae12-48c7fb7d55c7, Method: GET, URL: https://www.google.com/maps/search/restaurant+in+rome, UrlParams: map[hl:pt-BR]}","error":"Frame.Goto https://www.google.com/maps/search/restaurant+in+rome?hl=pt-BR: playwright: target closed: Target page, context or browser has been closed","status":"failed","duration":13713.1306,"time":"2026-03-19T02:18:32.8251749Z","message":"job finished"}
+{"level":"error","component":"scrapemate","error":"Frame.Goto https://www.google.com/maps/search/restaurant+in+rome?hl=pt-BR: playwright: target closed: Target page, context or browser has been closed","time":"2026-03-19T02:18:32.8251749Z","message":"error while processing job"}
+{"level":"info","component":"scrapemate","numOfJobsCompleted":0,"numOfJobsFailed":2,"lastActivityAt":"2026-03-19T02:18:32.8251749Z","speed":"0.00 jobs/min","time":"2026-03-19T02:18:37.3206703Z","message":"scrapemate stats"}
+{"level":"info","component":"scrapemate","time":"2026-03-19T02:18:47.2921829Z","message":"received signal, shutting down"}
+2026/03/18 23:18:47 Received signal, shutting down...

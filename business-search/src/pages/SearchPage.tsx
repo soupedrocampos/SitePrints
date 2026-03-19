@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Building2, Sparkles, BarChart3, Users, Download, PlusCircle, Loader2 } from 'lucide-react'
 import SearchForm from '../components/SearchForm'
 import MassSearch from '../components/MassSearch'
@@ -8,9 +9,12 @@ import DuplicateModal from '../components/DuplicateModal'
 import Pagination from '../components/Pagination'
 import EmptyState from '../components/EmptyState'
 import { ToastContainer } from '../components/Toast'
+import LocationInput from '../components/LocationInput'
 import { Business, BusinessType, Toast } from '../types/business'
 import { useCreateLead, useLeads } from '../hooks/useLeads'
 import { searchService } from '../services/search'
+import { searchHistoryService } from '../services/searchHistory'
+import { formatLocationWithFlag } from '../utils/flags'
 
 const PER_PAGE = 6
 
@@ -18,8 +22,6 @@ export default function SearchPage() {
     const [searchResults, setSearchResults] = useState<Business[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [hasSearched, setHasSearched] = useState(false)
-    const [currentLocation, setCurrentLocation] = useState('')
-    const [capturedLeads, setCapturedLeads] = useState<Set<string>>(new Set())
     const [duplicateBusiness, setDuplicateBusiness] = useState<Business | null>(null)
     const [toasts, setToasts] = useState<Toast[]>([])
     const [page, setPage] = useState(1)
@@ -28,7 +30,11 @@ export default function SearchPage() {
         try { return JSON.parse(localStorage.getItem('recentSearches') || '[]') } catch { return [] }
     })
 
-    const [searchMode, setSearchMode] = useState<'simple' | 'mass'>('simple')
+    const [searchParams] = useSearchParams()
+    const [currentLocation, setCurrentLocation] = useState(searchParams.get('loc') || '')
+    const [searchMode, setSearchMode] = useState<'simple' | 'mass'>(searchParams.get('mass') === 'true' ? 'mass' : 'simple')
+    const [capturedLeads, setCapturedLeads] = useState<Set<string>>(new Set())
+    const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
 
     const createLeadMutation = useCreateLead()
     const { data: storedLeads } = useLeads({ perPage: 1000 })
@@ -51,7 +57,7 @@ export default function SearchPage() {
         setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000)
     }, [])
 
-    const handleSearch = useCallback(async (query: string, location: string, radius: number, types: BusinessType[]) => {
+    const handleSearch = useCallback(async (query: string, location: string, radius: number, types: BusinessType[], useFreeScraper: boolean = false) => {
         setIsLoading(true)
         setHasSearched(true)
         setCurrentLocation(location)
@@ -67,10 +73,22 @@ export default function SearchPage() {
                 query,
                 location,
                 radius,
-                types: types as string[]
+                types: types as string[],
+                useFreeScraper
             })
 
             setSearchResults(response.results)
+
+            const historyItem = searchHistoryService.saveHistoryItem({
+                query,
+                location,
+                radiusKm: radius,
+                types: types as string[],
+                additionalFilters: [],
+                resultsFound: response.results.length,
+                searchMode: 'simple',
+            })
+            setCurrentSessionId(historyItem.sessionId)
         } catch (err) {
             console.error('Search failed:', err)
             addToast('Falha na busca. Verifique a conexão com o servidor backend.', 'error')
@@ -80,12 +98,27 @@ export default function SearchPage() {
         }
     }, [recentSearches, addToast])
 
-    const handleMassResults = useCallback((results: Business[]) => {
+    const handleMassResults = useCallback((results: Business[], categories: string[], isPartial: boolean = false) => {
         setHasSearched(true)
         setSearchResults(results)
         setPage(1)
+        
+        if (isPartial) return
+
         addToast(`${results.length} empresas encontradas na busca em massa!`, 'success')
-    }, [addToast])
+
+        const historyItem = searchHistoryService.saveHistoryItem({
+            query: `Busca em Massa (${categories.length} cat)`,
+            location: currentLocation,
+            radiusKm: 10,
+            types: [],
+            additionalFilters: [],
+            resultsFound: results.length,
+            searchMode: 'mass',
+            categories
+        })
+        setCurrentSessionId(historyItem.sessionId)
+    }, [addToast, currentLocation])
 
     const captureToDb = async (business: Business) => {
         await createLeadMutation.mutateAsync({
@@ -96,6 +129,7 @@ export default function SearchPage() {
             website: business.website || '',
             source: 'Google Maps',
             city: business.address.split('-').pop()?.trim() || currentLocation,
+            sessionId: currentSessionId || undefined
         })
     }
 
@@ -195,28 +229,38 @@ export default function SearchPage() {
                     </div>
                 )}
 
-                {/* Search Mode Toggles */}
-                <div className="flex bg-slate-800/50 p-1 rounded-xl w-fit mb-6 border border-slate-700/50">
-                    <button
-                        onClick={() => setSearchMode('simple')}
-                        className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                            searchMode === 'simple' 
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                                : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                    >
-                        Busca Simples
-                    </button>
-                    <button
-                        onClick={() => setSearchMode('mass')}
-                        className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                            searchMode === 'mass' 
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
-                                : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                    >
-                        Busca em Massa
-                    </button>
+                {/* Search Mode Toggles & Unified Location */}
+                <div className="flex flex-col md:flex-row items-center gap-4 mb-8 max-w-4xl mx-auto">
+                    <div className="flex bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 shrink-0">
+                        <button
+                            onClick={() => setSearchMode('simple')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                                searchMode === 'simple' 
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                                    : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                        >
+                            Busca Simples
+                        </button>
+                        <button
+                            onClick={() => setSearchMode('mass')}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                                searchMode === 'mass' 
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                                    : 'text-slate-400 hover:text-slate-200'
+                            }`}
+                        >
+                            Busca em Massa
+                        </button>
+                    </div>
+
+                    <div className="flex-1 w-full relative">
+                        <LocationInput 
+                            value={currentLocation}
+                            onChange={setCurrentLocation}
+                            className="w-full"
+                        />
+                    </div>
                 </div>
 
                 {/* Top section: Search Forms */}
@@ -226,12 +270,14 @@ export default function SearchPage() {
                             onSearch={handleSearch}
                             isLoading={isLoading}
                             recentSearches={recentSearches}
+                            externalLocation={currentLocation}
                         />
                     ) : (
                         <MassSearch
                             onResults={handleMassResults}
                             isLoading={isLoading}
                             setIsLoading={setIsLoading}
+                            externalLocation={currentLocation}
                         />
                     )}
                 </div>

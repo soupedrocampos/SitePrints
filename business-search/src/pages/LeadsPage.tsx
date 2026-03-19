@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Search, Plus, Download, Table2, LayoutGrid,
     Columns, ChevronDown, Users, Star, TrendingUp, Code, Globe
@@ -14,6 +14,8 @@ import BulkActionsBar from '../components/leads/BulkActionsBar'
 import LeadModal from '../components/leads/LeadModal'
 import LeadsEmptyState from '../components/leads/LeadsEmptyState'
 import { useLeads, useUpdateLead, useDeleteLead, useBulkUpdateStatus } from '../hooks/useLeads'
+import { searchHistoryService, SearchHistoryItem } from '../services/searchHistory'
+import { formatLocationWithFlag } from '../utils/flags'
 
 const DEFAULT_FILTERS: LeadFilters = {
     search: '', statuses: [], sources: [], dateFrom: '', dateTo: '',
@@ -31,7 +33,20 @@ const ALL_COL_LABELS: Record<string, string> = {
 export default function LeadsPage() {
     const [page, setPage] = useState(1)
     const [perPage, setPerPage] = useState(10)
-    const [filters, setFilters] = useState<LeadFilters>(DEFAULT_FILTERS)
+    const [searchParams] = useSearchParams()
+    const urlSessionId = searchParams.get('search')
+
+    const [filters, setFilters] = useState<LeadFilters>(() => ({
+        ...DEFAULT_FILTERS,
+        sessionId: urlSessionId || undefined
+    }))
+    
+    // Buscar infos da sessão se ela existir
+    const currentSession = useMemo(() => {
+        if (!urlSessionId) return null
+        const history = searchHistoryService.getHistory()
+        return history.find(h => h.sessionId === urlSessionId) || null
+    }, [urlSessionId])
     const [sortField, setSortField] = useState<SortField>('created_at')
     const [sortDir, setSortDir] = useState<SortDir>('desc')
     const [isCheckingWhatsApp, setIsCheckingWhatsApp] = useState(false)
@@ -45,6 +60,7 @@ export default function LeadsPage() {
         status: filters.statuses,
         source: filters.sources,
         onlyWithWebsite: filters.onlyWithWebsite,
+        sessionId: filters.sessionId,
         sortBy: sortField === 'quality' ? 'qualityScore' : sortField === 'created_at' ? 'createdAt' : 'companyName' as any,
         sortDir
     })
@@ -232,7 +248,16 @@ export default function LeadsPage() {
                                 Meus Leads
                                 <span className="text-sm font-normal text-slate-500 ml-1">({totalLeads})</span>
                             </h1>
-                            <p className="text-sm text-slate-500 mt-0.5">Gerencie e qualifique seus contatos</p>
+                            {currentSession ? (
+                                <p className="text-sm text-indigo-300 mt-2 flex items-center gap-2 bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/20 w-fit">
+                                    <Search size={14} className="text-indigo-400" />
+                                    Buscando leads de: <span className="text-white font-medium">{currentSession.query}</span>
+                                    <span className="opacity-50">•</span>
+                                    em <span className="text-white font-medium">{formatLocationWithFlag(currentSession.location)}</span>
+                                </p>
+                            ) : (
+                                <p className="text-sm text-slate-500 mt-0.5">Gerencie e qualifique seus contatos</p>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-2 flex-wrap">

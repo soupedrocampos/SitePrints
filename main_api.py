@@ -8,9 +8,11 @@ import googlemaps
 from datetime import datetime
 import uuid
 import logging
+import csv
 from fastapi.staticfiles import StaticFiles
 from business_checker import BusinessChecker
 from typing import List
+import asyncio
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -62,6 +64,7 @@ class MassSearchRequest(BaseModel):
     location: str
     categories: List[str]
     limit_per_category: int = 20
+    useFreeScraper: bool = False
 
 class AnalysisRequest(BaseModel):
     id: str
@@ -76,6 +79,83 @@ class AnalysisBatchRequest(BaseModel):
 class BusinessLink(BaseModel):
     label: str
     url: str
+
+
+async def run_free_scraper(queries: List[str], depth: int = 2) -> List['Business']:
+    uid = str(uuid.uuid4())
+    input_file = f"temp_queries_{uid}.txt"
+    output_file = f"temp_results_{uid}.csv"
+    scraper_dir = r"c:\Users\pacc1\Documents\Antigravity\VGVX - NOVA\google-maps-scraper-main"
+    scraper_exe = os.path.join(scraper_dir, "google-maps-scraper.exe")
+    
+    logger.info(f"Running free scraper (depth={depth}) for queries: {queries}")
+    
+    # Write queries
+    input_path = os.path.join(scraper_dir, input_file)
+    with open(input_path, "w", encoding="utf-8") as f:
+        for q in queries:
+            f.write(q + "\n")
+            
+    # Run executable
+    try:
+        process = await asyncio.create_subprocess_exec(
+            scraper_exe,
+            "-input", input_file,
+            "-results", output_file,
+            "-lang", "pt-BR",
+            "-depth", str(depth),
+            cwd=scraper_dir,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            logger.error(f"Scraper error: {stderr.decode()}")
+    except Exception as e:
+        logger.error(f"Failed to run free scraper: {e}")
+        
+    results = []
+    output_path = os.path.join(scraper_dir, output_file)
+    if os.path.exists(output_path):
+        with open(output_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                city_part = row.get("address", "").split(",")[0] if row.get("address") else ""
+                
+                rating_str = row.get("review_rating", "0")
+                review_count_str = row.get("review_count", "0")
+                try: rating = float(rating_str) if rating_str else None
+                except: rating = None
+                try: review_count = int(review_count_str) if review_count_str else 0
+                except: review_count = 0
+                
+                links = []
+                if row.get("website"):
+                    links.append(BusinessLink(label=identify_link_type(row.get("website"), "Website"), url=row.get("website")))
+                
+                results.append(Business(
+                    place_id=row.get("place_id") or str(uuid.uuid4()),
+                    name=row.get("title", ""),
+                    address=row.get("address", ""),
+                    phone=row.get("phone", ""),
+                    rating=rating,
+                    reviewCount=review_count,
+                    website=row.get("website") or None,
+                    type=row.get("category", "Serviços"),
+                    source="Raspador Gratuito",
+                    city=city_part,
+                    links=links
+                ))
+                
+    # Cleanup files
+    try:
+        if os.path.exists(input_path): os.remove(input_path)
+        if os.path.exists(output_path): os.remove(output_path)
+    except:
+        pass
+        
+    logger.info(f"Free scraper returned {len(results)} results")
+    return results
 
 
 # Shape aligned with frontend Business interface
@@ -204,27 +284,39 @@ async def search_businesses(
     query: str = Query(...),
     location: str = Query(...),
     radius: int = 5,
-    use_serp: bool = True
+    use_serp: bool = True,
+    useFreeScraper: bool = False
 ):
-    results = await process_search(query, location, radius, use_serp)
+    if useFreeScraper:
+        results = await run_free_scraper([f"{query} em {location}"], depth=1)
+    else:
+        results = await process_search(query, location, radius, use_serp)
     return {"results": results, "total": len(results), "sessionId": str(uuid.uuid4())}
 
 
 @app.post("/api/mass-search")
 async def mass_search(req: MassSearchRequest):
-    logger.info(f"Mass Search Request: location='{req.location}', categories={len(req.categories)}")
+    logger.info(f"Mass Search Request: location='{req.location}', categories={len(req.categories)}, useFreeScraper={req.useFreeScraper}")
     all_results = []
     seen_place_ids = set()
 
-    for idx, category in enumerate(req.categories):
-        logger.info(f"Processing category {idx+1}/{len(req.categories)}: {category}")
-        category_results = await process_search(category, req.location)
-        
-        for res in category_results:
+    if getattr(req, "useFreeScraper", False):
+        queries = [f"{category} em {req.location}" for category in req.categories]
+        free_results = await run_free_scraper(queries, depth=2)
+        for res in free_results:
             if res.place_id not in seen_place_ids:
                 seen_place_ids.add(res.place_id)
                 all_results.append(res)
-    
+    else:
+        for idx, category in enumerate(req.categories):
+            logger.info(f"Processing category {idx+1}/{len(req.categories)}: {category}")
+            category_results = await process_search(category, req.location)
+            
+            for res in category_results:
+                if res.place_id not in seen_place_ids:
+                    seen_place_ids.add(res.place_id)
+                    all_results.append(res)
+        
     logger.info(f"Mass search completed. Total unique results: {len(all_results)}")
     return {"results": all_results, "total": len(all_results), "sessionId": str(uuid.uuid4())}
 
@@ -234,17 +326,24 @@ async def analyze_site(req: AnalysisRequest):
     logger.info(f"Analyzing site: {req.businessName} ({req.website})")
     try:
         # Check accessibility and performance
+        # Note: check_website is still sync in BusinessChecker, but that's fine for now
         web_check = checker.check_website(req.website)
         
         # Take screenshot if accessible
         screenshot_path = None
         if web_check['accessible']:
-            screenshot_path = checker.take_screenshot(req.website, output_folder=SCREENSHOTS_DIR)
+            # Await the new async take_screenshot
+            screenshot_path = await checker.take_screenshot(
+                req.website, 
+                output_folder=SCREENSHOTS_DIR,
+                full_page=True,
+                delay_ms=1500
+            )
             if screenshot_path:
                 # Convert system path to URL path
                 screenshot_path = f"/screenshots/{os.path.basename(screenshot_path)}"
 
-        # Mock quality analysis for now (later can use Gemini)
+        # Mock quality analysis for now
         quality = {
             "aestheticScore": 85 if web_check['accessible'] else 0,
             "mobileScore": 78 if web_check['accessible'] else 0,
@@ -287,13 +386,21 @@ async def analyze_site(req: AnalysisRequest):
         }
 
 
+# Limite de concorrência sugerido pelo usuário (5 browsers paralelos)
+analysis_semaphore = asyncio.Semaphore(5)
+
 @app.post("/api/analyze/batch")
 async def analyze_batch(req: AnalysisBatchRequest):
-    # For now, process sequentially, but could use asyncio.gather
-    results = []
-    for site in req.sites:
-        res = await analyze_site(site)
-        results.append(res)
+    logger.info(f"Batch analysis request for {len(req.sites)} sites")
+    
+    async def limited_analysis(site):
+        async with analysis_semaphore:
+            return await analyze_site(site)
+    
+    # Processa todos em paralelo respeitando o limite do semáforo
+    results = await asyncio.gather(*(limited_analysis(site) for site in req.sites))
+    
+    logger.info(f"Batch analysis completed for {len(results)} sites")
     return results
 
 

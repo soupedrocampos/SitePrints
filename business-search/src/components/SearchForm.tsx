@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, MapPin, ChevronDown, Clock, X, Sliders, Loader2 } from 'lucide-react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Search, MapPin, ChevronDown, Clock, X, Sliders, Loader2, Zap, Turtle } from 'lucide-react'
 import { BusinessType } from '../types/business'
 
 const ALL_TYPES: BusinessType[] = ['Restaurante', 'Hotel', 'Varejo', 'Serviços', 'Saúde', 'Educação']
@@ -14,9 +15,10 @@ const typeEmojis: Record<string, string> = {
 }
 
 interface SearchFormProps {
-    onSearch: (query: string, location: string, radius: number, types: BusinessType[]) => void
+    onSearch: (query: string, location: string, radius: number, types: BusinessType[], useFreeScraper: boolean) => void
     isLoading: boolean
     recentSearches: string[]
+    externalLocation?: string
 }
 
 /* ─── CEP regex ─────── */
@@ -79,21 +81,16 @@ const CITIES: Suggestion[] = [
     { label: 'Guarulhos', sublabel: 'SP' },
 ]
 
-export default function SearchForm({ onSearch, isLoading, recentSearches }: SearchFormProps) {
-    const [query, setQuery] = useState('')
-    const [location, setLocation] = useState('')
+export default function SearchForm({ onSearch, isLoading, recentSearches, externalLocation = '' }: SearchFormProps) {
+    const [searchParams, setSearchParams] = useSearchParams()
+    const navigate = useNavigate()
+    const [query, setQuery] = useState(searchParams.get('q') || '')
     const [radius, setRadius] = useState(10)
     const [selectedTypes, setSelectedTypes] = useState<BusinessType[]>([])
+    const [useFreeScraper, setUseFreeScraper] = useState(false)
     const [showRecent, setShowRecent] = useState(false)
 
-    // Location autocomplete state
-    const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-    const [showSuggestions, setShowSuggestions] = useState(false)
-    const [locationLoading, setLocationLoading] = useState(false)
-    const [locationError, setLocationError] = useState('')
-
     const recentRef = useRef<HTMLDivElement>(null)
-    const locationRef = useRef<HTMLDivElement>(null)
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Update slider gradient
@@ -108,84 +105,13 @@ export default function SearchForm({ onSearch, isLoading, recentSearches }: Sear
     }
 
     const handleSearch = () => {
-        if (!query.trim() && !location.trim()) return
-        onSearch(query, location, radius, selectedTypes)
+        if (!query.trim() && !externalLocation.trim()) return
+        onSearch(query, externalLocation, radius, selectedTypes, useFreeScraper)
         setShowRecent(false)
-        setShowSuggestions(false)
     }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') handleSearch()
-    }
-
-    /* ─── CEP lookup via ViaCEP ─────────────────────────── */
-    const lookupCEP = useCallback(async (cep: string) => {
-        setLocationLoading(true)
-        setLocationError('')
-        try {
-            const clean = cep.replace(/\D/g, '')
-            const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`)
-            const data: ViaCEPResponse = await res.json()
-            if (data.erro) {
-                setLocationError('CEP não encontrado')
-                setSuggestions([])
-            } else {
-                const city = `${data.localidade}, ${data.uf}`
-                setLocation(city)
-                setSuggestions([])
-                setShowSuggestions(false)
-                setLocationError('')
-            }
-        } catch {
-            setLocationError('Erro ao buscar CEP')
-        } finally {
-            setLocationLoading(false)
-        }
-    }, [])
-
-    /* ─── Location input change handler ─────────────────── */
-    const handleLocationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value
-        setLocation(val)
-        setLocationError('')
-
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-
-        const raw = val.replace(/\D/g, '')
-
-        // Detect CEP (8 digits)
-        if (raw.length >= 8 && /^\d+$/.test(raw)) {
-            const formatted = `${raw.slice(0, 5)}-${raw.slice(5, 8)}`
-            if (CEP_RE.test(formatted) || raw.length === 8) {
-                debounceRef.current = setTimeout(() => lookupCEP(raw), 600)
-                setSuggestions([])
-                setShowSuggestions(false)
-                return
-            }
-        }
-
-        // Show city suggestions filtered by what the user typed
-        if (val.trim().length >= 2) {
-            const lower = val.toLowerCase()
-            const filtered = CITIES.filter(
-                (c) =>
-                    c.label.toLowerCase().includes(lower) ||
-                    (c.sublabel && c.sublabel.toLowerCase().includes(lower))
-            ).slice(0, 7)
-            setSuggestions(filtered)
-            setShowSuggestions(filtered.length > 0)
-        } else {
-            setSuggestions([])
-            setShowSuggestions(false)
-        }
-    }
-
-    /* ─── Pick a suggestion ──────────────────────────────── */
-    const pickSuggestion = (s: Suggestion) => {
-        const full = s.sublabel ? `${s.label}, ${s.sublabel}` : s.label
-        setLocation(full)
-        setSuggestions([])
-        setShowSuggestions(false)
     }
 
     /* ─── Close dropdowns on outside click ──────────────── */
@@ -194,13 +120,20 @@ export default function SearchForm({ onSearch, isLoading, recentSearches }: Sear
             if (recentRef.current && !recentRef.current.contains(e.target as Node)) {
                 setShowRecent(false)
             }
-            if (locationRef.current && !locationRef.current.contains(e.target as Node)) {
-                setShowSuggestions(false)
-            }
         }
         document.addEventListener('mousedown', handler)
         return () => document.removeEventListener('mousedown', handler)
     }, [])
+
+    /* ─── Auto-run from URL ────────────────────────────────── */
+    useEffect(() => {
+        if (searchParams.get('run') === '1' && query && externalLocation && searchParams.get('mass') !== 'true') {
+            onSearch(query, externalLocation, radius, selectedTypes, useFreeScraper)
+            // Remove run param to prevent infinite loops
+            searchParams.delete('run')
+            setSearchParams(searchParams, { replace: true })
+        }
+    }, []) // Run once on mount
 
     return (
         <div className="glass rounded-2xl p-5 flex flex-col gap-5">
@@ -258,105 +191,6 @@ export default function SearchForm({ onSearch, isLoading, recentSearches }: Sear
                 )}
             </div>
 
-            {/* Location */}
-            <div ref={locationRef}>
-                <label className="text-xs font-medium text-slate-400 mb-1.5 block">
-                    Localização
-                    <span className="ml-1 text-slate-600">· cidade, estado ou CEP</span>
-                </label>
-                <div className="relative">
-                    <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
-                        type="text"
-                        value={location}
-                        onChange={handleLocationChange}
-                        onKeyDown={handleKeyDown}
-                        onFocus={() => {
-                            if (suggestions.length > 0) setShowSuggestions(true)
-                        }}
-                        placeholder="Ex: São Paulo, SP ou 01310-100"
-                        className={`w-full bg-slate-800/60 border rounded-xl pl-9 pr-9 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none transition-all ${locationError
-                            ? 'border-red-500/70 focus:border-red-500/70 focus:ring-1 focus:ring-red-500/20'
-                            : 'border-slate-700 focus:border-indigo-500/70 focus:ring-1 focus:ring-indigo-500/30'
-                            }`}
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                        {locationLoading && (
-                            <Loader2 size={14} className="text-indigo-400 animate-spin" />
-                        )}
-                        {location && !locationLoading && (
-                            <button
-                                onClick={() => {
-                                    setLocation('')
-                                    setSuggestions([])
-                                    setLocationError('')
-                                }}
-                                className="text-slate-500 hover:text-slate-300"
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
-                    </div>
-
-                    {/* City suggestions dropdown */}
-                    {showSuggestions && suggestions.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden z-20 shadow-xl">
-                            {suggestions.map((s, i) => (
-                                <button
-                                    key={i}
-                                    onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s) }}
-                                    className="w-full text-left px-3 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2"
-                                >
-                                    <MapPin size={12} className="text-slate-500 shrink-0" />
-                                    <span>{s.label}</span>
-                                    {s.sublabel && (
-                                        <span className="ml-auto text-[11px] text-slate-500 font-medium bg-slate-700/60 px-1.5 py-0.5 rounded">
-                                            {s.sublabel}
-                                        </span>
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Error */}
-                {locationError && (
-                    <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-                        <X size={11} /> {locationError}
-                    </p>
-                )}
-
-                {/* CEP hint */}
-                {!locationError && location.replace(/\D/g, '').length >= 5 && /^\d/.test(location) && (
-                    <p className="text-xs text-slate-500 mt-1">
-                        {locationLoading ? 'Buscando CEP...' : 'Digite 8 dígitos para resolver automaticamente'}
-                    </p>
-                )}
-            </div>
-
-            {/* Radius slider */}
-            <div>
-                <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-medium text-slate-400">Raio de busca</label>
-                    <span className="text-xs font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">
-                        {radius} km
-                    </span>
-                </div>
-                <input
-                    type="range"
-                    min={1}
-                    max={50}
-                    value={radius}
-                    style={sliderStyle}
-                    onChange={(e) => setRadius(Number(e.target.value))}
-                />
-                <div className="flex justify-between mt-1">
-                    <span className="text-[10px] text-slate-600">1 km</span>
-                    <span className="text-[10px] text-slate-600">50 km</span>
-                </div>
-            </div>
-
             {/* Type chips */}
             <div>
                 <label className="text-xs font-medium text-slate-400 mb-2 block">Tipo de negócio</label>
@@ -380,10 +214,43 @@ export default function SearchForm({ onSearch, isLoading, recentSearches }: Sear
                 </div>
             </div>
 
-            {/* Search button */}
+            {/* Free Scraper Toggle */}
+            <div className="flex items-center justify-between p-3 rounded-xl border border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => setUseFreeScraper(!useFreeScraper)}>
+                <div className="flex gap-3 items-center">
+                    <div className={`p-2 rounded-lg transition-colors ${useFreeScraper ? 'bg-amber-500/20 text-amber-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
+                        {useFreeScraper ? <Turtle size={16} /> : <Zap size={16} />}
+                    </div>
+                    <div>
+                        <h4 className="text-xs font-semibold text-white">Raspador Gratuito</h4>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Automático, lento, sem custo.</p>
+                    </div>
+                </div>
+                <div className={`w-8 h-4 rounded-full relative transition-colors ${useFreeScraper ? 'bg-amber-500' : 'bg-slate-600'}`}>
+                    <div className={`w-3 h-3 rounded-full bg-white absolute top-0.5 shadow-sm transition-all ${useFreeScraper ? 'left-[18px]' : 'left-0.5'}`} />
+                </div>
+            </div>
+
+            {/* Raio de busca */}
+            <div>
+                <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-medium text-slate-400">Raio de busca</label>
+                    <span className="text-xs font-semibold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">
+                        {radius} km
+                    </span>
+                </div>
+                <input
+                    type="range"
+                    min={1}
+                    max={50}
+                    value={radius}
+                    style={sliderStyle}
+                    onChange={(e) => setRadius(Number(e.target.value))}
+                />
+            </div>
+
             <button
                 onClick={handleSearch}
-                disabled={isLoading || (!query.trim() && !location.trim())}
+                disabled={isLoading || (!query.trim() && !externalLocation.trim())}
                 className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/20 active:scale-[0.98] flex items-center justify-center gap-2"
             >
                 {isLoading ? (

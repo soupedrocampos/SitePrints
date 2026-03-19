@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { Lead, SortField, SortDir, LeadStatus, WhatsAppStatus } from '../../types/lead'
 import { STATUS_COLORS, STATUS_DOT, qualityColor, formatDate } from '../../lib/leadHelpers'
+import { formatLocationWithFlag } from '../../utils/flags'
 
 const SOURCE_ICONS: Record<string, string> = {
     'Google Maps': '🗺️',
@@ -180,7 +181,7 @@ export default function LeadsTable({
                                         <td className={tdCls}>
                                             <div className="flex items-center gap-1">
                                                 <MapPin size={10} className="text-slate-600 shrink-0" />
-                                                <span className="text-[11px]">{lead.city}, <span className="text-slate-500">{lead.state}</span></span>
+                                                <span className="text-[11px]">{formatLocationWithFlag(lead.city)}, <span className="text-slate-500">{lead.state}</span></span>
                                             </div>
                                         </td>
                                     )}
@@ -200,6 +201,16 @@ export default function LeadsTable({
                                                     className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 transition-all">
                                                     <Eye size={13} />
                                                 </Link>
+                                                <a
+                                                    href={lead.placesData?.placeId ? `https://www.google.com/maps/place/?q=place_id:${lead.placesData.placeId}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-all"
+                                                    title="Ver no Google Maps"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <MapPin size={13} />
+                                                </a>
                                                 <button onClick={() => onEdit(lead)} title="Editar"
                                                     className="p-1.5 rounded-lg text-slate-500 hover:text-yellow-400 hover:bg-yellow-500/10 transition-all">
                                                     <Pencil size={13} />

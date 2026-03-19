@@ -87,6 +87,15 @@ export default function BusinessCard({ business, onCapture, isCaptured }: Busine
                     >
                         {isCaptured ? '✓ Lead Capturado' : 'Capturar Lead'}
                     </button>
+                    <a
+                        href={business.place_id ? `https://www.google.com/maps/place/?q=place_id:${business.place_id}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${business.address || ''}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-xl border border-slate-700 hover:border-blue-500/50 text-slate-400 hover:text-blue-400 transition-all duration-200"
+                        title="Ver no Google Maps"
+                    >
+                        <MapPin size={14} />
+                    </a>
                     {business.website && (
                         <a
                             href={business.website}

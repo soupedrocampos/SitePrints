@@ -1,0 +1,5 @@
+supermercado in NOME_DA_CIDADE, Brazil
+mercado in NOME_DA_CIDADE, Brazil
+hortifruti in NOME_DA_CIDADE, Brazil
+mercearia in NOME_DA_CIDADE, Brazil
+hipermercado in NOME_DA_CIDADE, Brazil

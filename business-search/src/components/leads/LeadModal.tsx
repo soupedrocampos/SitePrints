@@ -81,6 +81,16 @@ export default function LeadModal({ lead, mode, onClose, onSave }: LeadModalProp
                         ))}
                     </div>
 
+                    {/* Google Maps Link */}
+                    <div className="flex items-center gap-2 bg-slate-800/40 rounded-xl p-3">
+                        <MapPin size={12} className="text-slate-500 shrink-0" />
+                        <a href={lead.placesData?.placeId ? `https://www.google.com/maps/place/?q=place_id:${lead.placesData.placeId}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.name} ${lead.address || lead.city || ''}`)}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-blue-400 hover:text-blue-300 truncate underline underline-offset-2">
+                            Ver ficha no Google Maps
+                        </a>
+                    </div>
+
                     {/* Website */}
                     {lead.website && (
                         <div className="flex items-center gap-2 bg-slate-800/40 rounded-xl p-3">

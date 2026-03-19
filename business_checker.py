@@ -1,17 +1,20 @@
-import googlemaps
-import requests
-import time
-import urllib.parse
+import os
+import asyncio
+from playwright.async_api import async_playwright
 from datetime import datetime
 import json
-import os
+import requests
+import googlemaps
+import time
+import urllib.parse
 
 class BusinessChecker:
-    def __init__(self, google_api_key):
+    def __init__(self, google_api_key=None):
         """
-        Inicializa o checker com a chave da API do Google Places
+        Inicializa o checker. A chave do Google é opcional se for usar apenas screenshots.
         """
-        self.gmaps = googlemaps.Client(key=google_api_key)
+        self.google_api_key = google_api_key
+        self.gmaps = googlemaps.Client(key=google_api_key) if google_api_key else None
         self.results = []
     
     def search_businesses(self, keyword, location="", radius=5000):
@@ -108,51 +111,54 @@ class BusinessChecker:
         
         return result
     
-    def take_screenshot(self, url, output_folder='screenshots'):
+    async def take_screenshot(self, url, output_folder='screenshots', full_page=True, delay_ms=1500):
         """
-        Tira um screenshot da página
+        Tira um screenshot da página usando Playwright Assíncrono
         
         Args:
             url: URL do website
             output_folder: Pasta para salvar screenshots
+            full_page: Se deve tirar o print da página inteira
+            delay_ms: Delay antes do print (evitar bloqueio/esperar JS)
         """
         if not os.path.exists(output_folder):
             os.makedirs(output_folder)
         
         try:
-            # Format the URL
             url_with_scheme = url if url.startswith(('http://', 'https://')) else f"https://{url}"
             
-            # Use Microlink API instead of local headless Chrome
-            encoded_url = urllib.parse.quote(url_with_scheme, safe='')
-            api_url = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&meta=false"
-            
-            # Timeout set to 20s for the API call
-            response = requests.get(api_url, timeout=20)
-            response.raise_for_status()
-            data = response.json()
-            
-            ss_url = data.get('data', {}).get('screenshot', {}).get('url')
-            if not ss_url:
-                print(f"Microlink não retornou um screenshot para {url}")
-                return None
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    viewport={'width': 1280, 'height': 800},
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                )
                 
-            # Download the actual image
-            img_response = requests.get(ss_url, timeout=15)
-            img_response.raise_for_status()
-            
-            # Gera nome do arquivo
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            filename = os.path.join(output_folder, f"screenshot_{timestamp}.png")
-            
-            with open(filename, 'wb') as f:
-                f.write(img_response.content)
-            
-            print(f"Screenshot salvo: {filename}")
-            return filename
+                page = await context.new_page()
+                
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                filename = os.path.join(output_folder, f"screenshot_{timestamp}.png")
+                
+                try:
+                    # Navigation: domcontentloaded é mais rápido que networkidle
+                    await page.goto(url_with_scheme, wait_until="domcontentloaded", timeout=30000)
+                    
+                    # Delay sugerido pelo usuário
+                    if delay_ms > 0:
+                        await asyncio.sleep(delay_ms / 1000)
+                    
+                    await page.screenshot(path=filename, full_page=full_page)
+                    print(f"✅ Screenshot salvo: {filename}")
+                except Exception as e:
+                    print(f"❌ Erro ao capturar {url}: {e}")
+                    await browser.close()
+                    return None
+                
+                await browser.close()
+                return filename
             
         except Exception as e:
-            print(f"Erro ao tirar screenshot de {url} com Microlink: {e}")
+            print(f"❌ Erro crítico Playwright ({url}): {e}")
             return None
     
     def analyze_businesses(self, businesses):

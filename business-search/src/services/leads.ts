@@ -17,6 +17,7 @@ export interface LeadFilters {
     createdAfter?: string
     createdBefore?: string
     onlyWithWebsite?: boolean
+    sessionId?: string
     page?: number
     perPage?: number
     sortBy?: 'createdAt' | 'qualityScore' | 'companyName'
@@ -35,6 +36,7 @@ export interface CreateLeadPayload {
     state?: string
     source: Lead['source']
     notes?: string
+    sessionId?: string
 }
 
 export interface UpdateLeadPayload extends Partial<CreateLeadPayload> {
@@ -81,6 +83,9 @@ export const leadsService = {
         }
         if (filters.onlyWithWebsite) {
             leads = leads.filter(l => !!l.website && l.website.trim() !== '')
+        }
+        if (filters.sessionId) {
+            leads = leads.filter(l => l.sessionId === filters.sessionId)
         }
 
         // Sorting
@@ -155,7 +160,8 @@ export const leadsService = {
             dataQuality: {
                 completeness: 50,
                 flags: []
-            }
+            },
+            sessionId: payload.sessionId,
         }
         leads.unshift(newLead)
         saveLeadsToStorage(leads)

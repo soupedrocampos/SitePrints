@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
     Search, MapPin, Clock, ChevronDown, ChevronUp, Download, Trash2,
@@ -6,9 +6,10 @@ import {
     Filter, SlidersHorizontal, ArrowUpDown, Tag,
 } from 'lucide-react'
 import {
-    SEARCH_HISTORY, SearchHistoryItem, DateGroup,
+    searchHistoryService, SearchHistoryItem, DateGroup,
     getDateGroup, relativeTime, exportHistoryCSV,
-} from '../lib/searchHistoryData'
+} from '../services/searchHistory'
+import { formatLocationWithFlag } from '../utils/flags'
 
 /* ── types ─────────────────────────────────────────── */
 type SortKey = 'recent' | 'results' | 'leads'
@@ -77,7 +78,7 @@ function HistoryCard({
                                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                                     <span className="flex items-center gap-1 text-[11px] text-slate-500">
                                         <MapPin size={10} className="text-slate-600 shrink-0" />
-                                        {item.location}
+                                        {formatLocationWithFlag(item.location)}
                                     </span>
                                     <span className="flex items-center gap-1 text-[11px] text-slate-600">
                                         <Clock size={10} className="shrink-0" />
@@ -107,10 +108,6 @@ function HistoryCard({
 
                         {/* Metric pills */}
                         <div className="flex items-center gap-2 mt-2.5 flex-wrap">
-                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[11px] text-slate-300">
-                                <Search size={9} className="text-slate-500" />
-                                {item.resultsFound} resultados
-                            </span>
                             <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium ${item.leadsCaptured > 0
                                 ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
                                 : 'bg-slate-800 border-slate-700 text-slate-500'
@@ -120,7 +117,7 @@ function HistoryCard({
                             </span>
 
                             {/* Business type chips */}
-                            {item.types.map(t => (
+                            {(item.searchMode === 'mass' ? item.categories || [] : item.types || []).map(t => (
                                 <span key={t}
                                     className={`px-2 py-0.5 rounded-full border text-[10px] font-medium ${TYPE_COLORS[t] ?? 'bg-slate-800 border-slate-700 text-slate-400'}`}>
                                     {t}
@@ -187,14 +184,18 @@ export default function SearchHistoryPage() {
     const [filterRange, setFilterRange] = useState<FilterRange>('all')
     const [showClearConfirm, setShowClearConfirm] = useState(false)
     const [showSortMenu, setShowSortMenu] = useState(false)
-    const [items, setItems] = useState<SearchHistoryItem[]>(SEARCH_HISTORY)
+    const [items, setItems] = useState<SearchHistoryItem[]>([])
     const [page, setPage] = useState(1)
+
+    useEffect(() => {
+        setItems(searchHistoryService.getHistory())
+    }, [])
     const PAGE_SIZE = 10
     const sortRef = useRef<HTMLDivElement>(null)
 
     /* ── filter + sort ────────────────────────────────── */
     const filtered = useMemo(() => {
-        const now = new Date('2026-02-28T15:00:00')
+        const now = new Date()
         let list = items.filter(i => {
             if (searchQuery && !i.query.toLowerCase().includes(searchQuery.toLowerCase()) &&
                 !i.location.toLowerCase().includes(searchQuery.toLowerCase())) return false
@@ -236,14 +237,21 @@ export default function SearchHistoryPage() {
     }, [paged])
 
     const handleRepeat = useCallback((item: SearchHistoryItem) => {
-        navigate(`/?q=${encodeURIComponent(item.query)}&loc=${encodeURIComponent(item.location)}`)
+        if (item.searchMode === 'mass') {
+            const catParams = item.categories?.join(',') || ''
+            navigate(`/?mass=true&categories=${encodeURIComponent(catParams)}&loc=${encodeURIComponent(item.location)}`)
+        } else {
+            navigate(`/?q=${encodeURIComponent(item.query)}&loc=${encodeURIComponent(item.location)}`)
+        }
     }, [navigate])
 
     const handleDelete = useCallback((id: string) => {
+        searchHistoryService.deleteHistoryItem(id)
         setItems(prev => prev.filter(i => i.id !== id))
     }, [])
 
     const handleClearAll = useCallback(() => {
+        searchHistoryService.clearHistory()
         setItems([])
         setShowClearConfirm(false)
     }, [])
