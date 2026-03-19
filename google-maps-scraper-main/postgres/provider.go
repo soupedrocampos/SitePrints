@@ -229,6 +229,7 @@ func (p *provider) fetchJobs(ctx context.Context) {
 			}
 
 			jobs = jobs[:0]
+			currentDelay = baseDelay
 		} else if len(jobs) == 0 {
 			select {
 			case <-time.After(currentDelay):

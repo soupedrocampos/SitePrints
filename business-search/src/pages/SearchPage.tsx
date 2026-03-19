@@ -128,8 +128,14 @@ export default function SearchPage() {
             phone: business.phone || '',
             website: business.website || '',
             source: 'Google Maps',
-            city: business.address.split('-').pop()?.trim() || currentLocation,
-            sessionId: currentSessionId || undefined
+            city: business.city || business.address.split('-').pop()?.trim() || currentLocation,
+            state: business.state || '',
+            sessionId: currentSessionId || undefined,
+            placesData: {
+                placeId: business.place_id,
+                rating: business.rating ?? undefined,
+                reviewCount: business.reviewCount ?? undefined,
+            },
         })
     }
 

@@ -92,6 +92,7 @@ export default function SearchForm({ onSearch, isLoading, recentSearches, extern
 
     const recentRef = useRef<HTMLDivElement>(null)
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const hasAutoRunRef = useRef(false)
 
     // Update slider gradient
     const sliderStyle = {
@@ -127,13 +128,20 @@ export default function SearchForm({ onSearch, isLoading, recentSearches, extern
 
     /* ─── Auto-run from URL ────────────────────────────────── */
     useEffect(() => {
-        if (searchParams.get('run') === '1' && query && externalLocation && searchParams.get('mass') !== 'true') {
+        if (
+            !hasAutoRunRef.current &&
+            searchParams.get('run') === '1' &&
+            query &&
+            externalLocation &&
+            searchParams.get('mass') !== 'true'
+        ) {
+            hasAutoRunRef.current = true
             onSearch(query, externalLocation, radius, selectedTypes, useFreeScraper)
-            // Remove run param to prevent infinite loops
-            searchParams.delete('run')
-            setSearchParams(searchParams, { replace: true })
+            const next = new URLSearchParams(searchParams)
+            next.delete('run')
+            setSearchParams(next, { replace: true })
         }
-    }, []) // Run once on mount
+    }, [query, externalLocation, radius, selectedTypes, useFreeScraper, onSearch, searchParams, setSearchParams])
 
     return (
         <div className="glass rounded-2xl p-5 flex flex-col gap-5">
@@ -215,7 +223,13 @@ export default function SearchForm({ onSearch, isLoading, recentSearches, extern
             </div>
 
             {/* Free Scraper Toggle */}
-            <div className="flex items-center justify-between p-3 rounded-xl border border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => setUseFreeScraper(!useFreeScraper)}>
+            <button
+                type="button"
+                aria-pressed={useFreeScraper}
+                aria-label="Usar raspador gratuito"
+                className="flex items-center justify-between w-full p-3 rounded-xl border border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-800/50 transition-colors text-left"
+                onClick={() => setUseFreeScraper(!useFreeScraper)}
+            >
                 <div className="flex gap-3 items-center">
                     <div className={`p-2 rounded-lg transition-colors ${useFreeScraper ? 'bg-amber-500/20 text-amber-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
                         {useFreeScraper ? <Turtle size={16} /> : <Zap size={16} />}
@@ -228,7 +242,7 @@ export default function SearchForm({ onSearch, isLoading, recentSearches, extern
                 <div className={`w-8 h-4 rounded-full relative transition-colors ${useFreeScraper ? 'bg-amber-500' : 'bg-slate-600'}`}>
                     <div className={`w-3 h-3 rounded-full bg-white absolute top-0.5 shadow-sm transition-all ${useFreeScraper ? 'left-[18px]' : 'left-0.5'}`} />
                 </div>
-            </div>
+            </button>
 
             {/* Raio de busca */}
             <div>

@@ -44,6 +44,7 @@ func (r *resultWriter) Run(ctx context.Context, in <-chan scrapemate.Result) err
 			}
 
 			buff = buff[:0]
+			lastSave = time.Now().UTC()
 		}
 	}
 

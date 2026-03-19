@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -421,7 +422,8 @@ func (s *Server) download(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	fileName := filepath.Base(filePath)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
+	params := map[string]string{"filename": fileName}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", params))
 	w.Header().Set("Content-Type", "text/csv")
 
 	_, err = io.Copy(w, file)

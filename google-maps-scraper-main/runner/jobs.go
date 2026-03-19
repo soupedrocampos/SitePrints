@@ -154,7 +154,8 @@ func LoadCustomWriter(pluginDir, pluginName string) (scrapemate.ResultWriter, er
 
 		symWriter, err := p.Lookup(pluginName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to lookup symbol %s: %w", pluginName, err)
+			fmt.Printf("skipping plugin %s: symbol %q not found: %v\n", file.Name(), pluginName, err)
+			continue
 		}
 
 		writer, ok := symWriter.(*scrapemate.ResultWriter)

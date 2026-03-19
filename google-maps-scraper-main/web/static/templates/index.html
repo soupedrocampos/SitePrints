@@ -46,7 +46,7 @@
                     hx-swap="beforeend"
                     hx-indicator="#spinner"
                     hx-on::before-request="document.getElementById('error-container').innerHTML = ''"
-                    hx-on::after-request="if(!event.detail.successful) document.getElementById('error-container').innerHTML = event.detail.xhr.responseText"
+                    hx-on::after-request="if(!event.detail.successful) document.getElementById('error-container').textContent = event.detail.xhr.responseText"
                 >
                     
                     <fieldset>
@@ -113,11 +113,11 @@
                         <fieldset>
                             <div class="form-group">
                                 <label for="proxies">Proxies:(one per line)</label>
-                                <p class="text-muted"><small>Examples:<br>
-                                        <p>HTTPS proxy with username/password: https://username:password@myproxy.local:443<p>
-                                        <p>HTTP proxy with username/password: http://username:password@myproxy.local:443<p>
-                                        <p>SOCKS5 proxy without auth: socks5://127.0.0.1:8000</p>
-                                </p>
+                                <div class="text-muted"><small>Examples:<br>
+                                    <div>HTTPS proxy with username/password: https://username:password@myproxy.local:443</div>
+                                    <div>HTTP proxy with username/password: http://username:password@myproxy.local:443</div>
+                                    <div>SOCKS5 proxy without auth: socks5://127.0.0.1:8000</div>
+                                </small></div>
 
                                 <textarea id="proxies" name="proxies" rows="5">{{.ProxiesString}}</textarea>
                             </div>

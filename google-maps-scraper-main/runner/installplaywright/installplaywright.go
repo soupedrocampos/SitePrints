@@ -12,6 +12,10 @@ type installer struct {
 }
 
 func New(cfg *runner.Config) (runner.Runner, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("%w: nil config", runner.ErrInvalidRunMode)
+	}
+
 	if cfg.RunMode != runner.RunModeInstallPlaywright {
 		return nil, fmt.Errorf("%w: %d", runner.ErrInvalidRunMode, cfg.RunMode)
 	}

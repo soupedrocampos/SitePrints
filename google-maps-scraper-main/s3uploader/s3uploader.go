@@ -14,7 +14,7 @@ type Uploader struct {
 	client *s3.Client
 }
 
-func New(accessKey, secretKey, region string) *Uploader {
+func New(accessKey, secretKey, region string) (*Uploader, error) {
 	creds := credentials.NewStaticCredentialsProvider(accessKey, secretKey, "")
 
 	cfg, err := config.LoadDefaultConfig(context.Background(),
@@ -22,14 +22,14 @@ func New(accessKey, secretKey, region string) *Uploader {
 		config.WithRegion(region),
 	)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	client := s3.NewFromConfig(cfg)
 
 	return &Uploader{
 		client: client,
-	}
+	}, nil
 }
 
 func (u *Uploader) Upload(ctx context.Context, bucketName, key string, body io.Reader) error {

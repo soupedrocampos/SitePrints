@@ -28,17 +28,21 @@ type Event struct {
 }
 
 func NewEvent(name string, props map[string]any) Event {
-	ev := Event{
-		AnonymousID: generateMachineID().id,
-		Name:        name,
-		Properties:  generateMachineID().meta,
+	mid := generateMachineID()
+	meta := make(map[string]any)
+	for k, v := range mid.meta {
+		meta[k] = v
 	}
 
 	for k, v := range props {
-		ev.Properties[k] = v
+		meta[k] = v
 	}
 
-	return ev
+	return Event{
+		AnonymousID: mid.id,
+		Name:        name,
+		Properties:  meta,
+	}
 }
 
 type Telemetry interface {

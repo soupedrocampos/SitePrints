@@ -37,6 +37,11 @@ export interface CreateLeadPayload {
     source: Lead['source']
     notes?: string
     sessionId?: string
+    placesData?: {
+        placeId?: string
+        rating?: number
+        reviewCount?: number
+    }
 }
 
 export interface UpdateLeadPayload extends Partial<CreateLeadPayload> {
@@ -162,6 +167,11 @@ export const leadsService = {
                 flags: []
             },
             sessionId: payload.sessionId,
+            placesData: payload.placesData ? {
+                placeId: payload.placesData.placeId,
+                rating: payload.placesData.rating,
+                reviewCount: payload.placesData.reviewCount,
+            } : undefined,
         }
         leads.unshift(newLead)
         saveLeadsToStorage(leads)

@@ -13,7 +13,7 @@ export function getFlagFromLocation(location: string): string {
     if (lowerLoc.includes('argentina')) return '🇦🇷'
     if (lowerLoc.includes('chile')) return '🇨🇱'
     if (lowerLoc.includes('mexico') || lowerLoc.includes('méxico')) return '🇲🇽'
-    if (lowerLoc.includes('uk') || lowerLoc.includes('united kingdom') || lowerLoc.includes('reino unido') || lowerLoc.includes('london')) return '🇬🇧'
+    if (/\buk\b/.test(lowerLoc) || lowerLoc.includes('united kingdom') || lowerLoc.includes('reino unido') || lowerLoc.includes('london')) return '🇬🇧'
     if (lowerLoc.includes('canada') || lowerLoc.includes('canadá')) return '🇨🇦'
     if (lowerLoc.includes('france') || lowerLoc.includes('frança')) return '🇫🇷'
     if (lowerLoc.includes('italy') || lowerLoc.includes('itália')) return '🇮🇹'

@@ -85,7 +85,10 @@ async def run_free_scraper(queries: List[str], depth: int = 2) -> List['Business
     uid = str(uuid.uuid4())
     input_file = f"temp_queries_{uid}.txt"
     output_file = f"temp_results_{uid}.csv"
-    scraper_dir = r"c:\Users\pacc1\Documents\Antigravity\VGVX - NOVA\google-maps-scraper-main"
+    
+    # Use environment variable for portability, fallback to default relative path
+    default_scraper_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "google-maps-scraper-main")
+    scraper_dir = os.getenv("SCRAPER_DIR", default_scraper_dir)
     scraper_exe = os.path.join(scraper_dir, "google-maps-scraper.exe")
     
     logger.info(f"Running free scraper (depth={depth}) for queries: {queries}")
@@ -108,11 +111,19 @@ async def run_free_scraper(queries: List[str], depth: int = 2) -> List['Business
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await process.communicate()
-        if process.returncode != 0:
-            logger.error(f"Scraper error: {stderr.decode()}")
+        
+        # Add timeout to prevent hanging processes
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+            if process.returncode != 0:
+                logger.error(f"Scraper error (code {process.returncode}): {stderr.decode() if stderr else 'Unknown error'}")
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            logger.error("Scraper subprocess timed out after 300 seconds")
+            
     except Exception as e:
-        logger.error(f"Failed to run free scraper: {e}")
+        logger.error(f"Failed to execute free scraper: {e}")
         
     results = []
     output_path = os.path.join(scraper_dir, output_file)
@@ -124,10 +135,14 @@ async def run_free_scraper(queries: List[str], depth: int = 2) -> List['Business
                 
                 rating_str = row.get("review_rating", "0")
                 review_count_str = row.get("review_count", "0")
-                try: rating = float(rating_str) if rating_str else None
-                except: rating = None
-                try: review_count = int(review_count_str) if review_count_str else 0
-                except: review_count = 0
+                try: 
+                    rating = float(rating_str) if rating_str else None
+                except (ValueError, TypeError): 
+                    rating = None
+                try: 
+                    review_count = int(review_count_str) if review_count_str else 0
+                except (ValueError, TypeError): 
+                    review_count = 0
                 
                 links = []
                 if row.get("website"):
@@ -261,17 +276,40 @@ async def process_search(query: str, location: str, radius: int = 5, use_serp: b
             places_result = gmaps.places(query=query, location=loc, radius=radius * 1000, language="pt-BR")
             places_list = places_result.get("results", [])
 
+            # Fetch website for each place via Place Details (runs in parallel via thread pool)
+            async def fetch_place_website(place_id: str):
+                try:
+                    details = await asyncio.to_thread(
+                        gmaps.place, place_id=place_id, fields=["website", "formatted_phone_number"], language="pt-BR"
+                    )
+                    result = details.get("result", {})
+                    return place_id, result.get("website"), result.get("formatted_phone_number")
+                except Exception:
+                    return place_id, None, None
+
+            place_ids = [p.get("place_id") for p in places_list if p.get("place_id")]
+            detail_results = await asyncio.gather(*[fetch_place_website(pid) for pid in place_ids])
+            place_details_map = {pid: (website, phone) for pid, website, phone in detail_results if pid}
+
             for place in places_list:
+                pid = place.get("place_id", str(uuid.uuid4()))
+                website, phone = place_details_map.get(pid, (None, None))
+                links = []
+                if website:
+                    links.append(BusinessLink(label=identify_link_type(website, "Website"), url=website))
                 results.append(Business(
-                    place_id=place.get("place_id", str(uuid.uuid4())),
+                    place_id=pid,
                     name=place.get("name", ""),
                     address=place.get("formatted_address", ""),
+                    phone=phone,
                     rating=place.get("rating"),
                     reviewCount=place.get("user_ratings_total", 0),
+                    website=website,
                     type=place.get("types", ["Serviços"])[0].replace("_", " ").title() if place.get("types") else "Serviços",
                     source="Google Places",
                     city=city_part,
                     state=state_part,
+                    links=links,
                 ))
         except Exception as e:
             logger.error(f"Google Places Error: {e}")

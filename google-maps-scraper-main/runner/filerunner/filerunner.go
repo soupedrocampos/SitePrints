@@ -108,21 +108,29 @@ func (r *fileRunner) Run(ctx context.Context) (err error) {
 }
 
 func (r *fileRunner) Close(context.Context) error {
+	var firstErr error
+
 	if r.app != nil {
-		return r.app.Close()
+		if err := r.app.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 
 	if r.input != nil {
 		if closer, ok := r.input.(io.Closer); ok {
-			return closer.Close()
+			if err := closer.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 
 	if r.outfile != nil {
-		return r.outfile.Close()
+		if err := r.outfile.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 
-	return nil
+	return firstErr
 }
 
 func (r *fileRunner) setInput() error {
@@ -217,7 +225,7 @@ func (r *fileRunner) setApp() error {
 	if !r.cfg.DisablePageReuse {
 		opts = append(opts,
 			scrapemateapp.WithPageReuseLimit(2),
-			scrapemateapp.WithPageReuseLimit(200),
+			scrapemateapp.WithBrowserReuseLimit(200),
 		)
 	}
 

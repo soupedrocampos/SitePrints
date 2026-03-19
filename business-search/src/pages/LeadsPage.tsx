@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Search, Plus, Download, Table2, LayoutGrid,
@@ -47,6 +47,12 @@ export default function LeadsPage() {
         const history = searchHistoryService.getHistory()
         return history.find(h => h.sessionId === urlSessionId) || null
     }, [urlSessionId])
+
+    // Sync sessionId filter whenever the URL param changes
+    useEffect(() => {
+        setFilters(prev => ({ ...prev, sessionId: urlSessionId || undefined }))
+    }, [urlSessionId])
+
     const [sortField, setSortField] = useState<SortField>('created_at')
     const [sortDir, setSortDir] = useState<SortDir>('desc')
     const [isCheckingWhatsApp, setIsCheckingWhatsApp] = useState(false)
@@ -121,9 +127,35 @@ export default function LeadsPage() {
         setActiveModal(null)
     }
 
-    const handleAnalyzeBatch = useCallback(() => {
+    const handleAnalyzeBatch = useCallback(async () => {
         const selectedLeads = leads.filter(l => selected.has(l.id))
-        const analysisData = selectedLeads.map(l => ({
+
+        // For leads without website but with placeId, try to fetch from Google Places Details
+        const enriched = await Promise.all(selectedLeads.map(async (l) => {
+            if (!l.website && l.placesData?.placeId) {
+                try {
+                    const res = await axios.get(`http://localhost:3002/api/places/details/${l.placesData.placeId}`)
+                    const website = res.data?.website
+                    if (website) {
+                        // Persist the discovered website back to localStorage
+                        const raw = localStorage.getItem('crm_captured_leads')
+                        if (raw) {
+                            const allLeads = JSON.parse(raw)
+                            const idx = allLeads.findIndex((x: any) => x.id === l.id)
+                            if (idx !== -1) {
+                                allLeads[idx] = { ...allLeads[idx], website }
+                                localStorage.setItem('crm_captured_leads', JSON.stringify(allLeads))
+                                window.dispatchEvent(new Event('storage'))
+                            }
+                        }
+                        return { ...l, website }
+                    }
+                } catch { /* ignore enrichment errors */ }
+            }
+            return l
+        }))
+
+        const analysisData = enriched.map(l => ({
             id: l.id,
             businessName: l.name,
             website: l.website || '',
@@ -132,8 +164,17 @@ export default function LeadsPage() {
         })).filter(l => !!l.website)
 
         if (analysisData.length === 0) {
-            alert('Selecione leads que possuam website para analisar.')
+            const withPlaceId = selectedLeads.filter(l => l.placesData?.placeId).length
+            const msg = withPlaceId > 0
+                ? `Nenhum dos ${selectedLeads.length} leads selecionados possui website. Tente buscá-los novamente — o sistema tentou recuperar via Google Places mas não encontrou dados.`
+                : `Nenhum dos ${selectedLeads.length} leads selecionados possui website cadastrado. Edite os leads manualmente para adicionar o website.`
+            alert(msg)
             return
+        }
+
+        const skipped = selectedLeads.length - analysisData.length
+        if (skipped > 0) {
+            console.info(`Análise: ${skipped} lead(s) ignorado(s) por não ter website.`)
         }
 
         sessionStorage.setItem('pending_analysis', JSON.stringify(analysisData))

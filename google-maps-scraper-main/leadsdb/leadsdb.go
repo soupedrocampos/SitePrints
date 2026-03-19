@@ -60,6 +60,7 @@ func (l *leadsDBWriter) Run(ctx context.Context, in <-chan scrapemate.Result) er
 			}
 
 			buff = buff[:0]
+			lastSave = time.Now().UTC()
 		}
 	}
 

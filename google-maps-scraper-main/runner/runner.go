@@ -63,7 +63,7 @@ type Config struct {
 	RunMode                  int
 	DisableTelemetry         bool
 	WebRunner                bool
-	AwsLamdbaRunner          bool
+	AwsLambdaRunner          bool
 	DataFolder               string
 	Proxies                  []string
 	AwsAccessKey             string
@@ -95,7 +95,7 @@ func ParseConfig() *Config {
 		proxies string
 	)
 
-	flag.IntVar(&cfg.Concurrency, "c", min(runtime.NumCPU()/2, 1), "sets the concurrency [default: half of CPU cores]")
+	flag.IntVar(&cfg.Concurrency, "c", max(runtime.NumCPU()/2, 1), "sets the concurrency [default: half of CPU cores]")
 	flag.StringVar(&cfg.CacheDir, "cache", "cache", "sets the cache directory [no effect at the moment]")
 	flag.IntVar(&cfg.MaxDepth, "depth", 10, "maximum scroll depth in search results [default: 10]")
 	flag.StringVar(&cfg.ResultsFile, "results", "stdout", "path to the results file [default: stdout]")
@@ -113,7 +113,7 @@ func ParseConfig() *Config {
 	flag.BoolVar(&cfg.WebRunner, "web", false, "run web server instead of crawling")
 	flag.StringVar(&cfg.DataFolder, "data-folder", "webdata", "data folder for web runner")
 	flag.StringVar(&proxies, "proxies", "", "comma separated list of proxies to use in the format protocol://user:pass@host:port example: socks5://localhost:9050 or http://user:pass@localhost:9050")
-	flag.BoolVar(&cfg.AwsLamdbaRunner, "aws-lambda", false, "run as AWS Lambda function")
+	flag.BoolVar(&cfg.AwsLambdaRunner, "aws-lambda", false, "run as AWS Lambda function")
 	flag.BoolVar(&cfg.AwsLambdaInvoker, "aws-lambda-invoker", false, "run as AWS Lambda invoker")
 	flag.StringVar(&cfg.FunctionName, "function-name", "", "AWS Lambda function name")
 	flag.StringVar(&cfg.AwsAccessKey, "aws-access-key", "", "AWS access key")
@@ -181,7 +181,7 @@ func ParseConfig() *Config {
 	switch {
 	case cfg.AwsLambdaInvoker:
 		cfg.RunMode = RunModeAwsLambdaInvoker
-	case cfg.AwsLamdbaRunner:
+	case cfg.AwsLambdaRunner:
 		cfg.RunMode = RunModeAwsLambda
 	case cfg.WebRunner || (cfg.Dsn == "" && cfg.InputFile == ""):
 		cfg.RunMode = RunModeWeb

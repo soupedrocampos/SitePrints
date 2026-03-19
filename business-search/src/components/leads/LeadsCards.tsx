@@ -76,6 +76,7 @@ export default function LeadsCards({ leads, totalLeads, onView, onEdit, onDelete
                             rel="noopener noreferrer"
                             className="flex-1 py-1.5 rounded-lg flex items-center justify-center bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 transition-all"
                             title="Ver no Google Maps"
+                            aria-label={`Ver ${lead.name} no Google Maps`}
                             onClick={(e) => e.stopPropagation()}
                         >
                             <MapPin size={12} />

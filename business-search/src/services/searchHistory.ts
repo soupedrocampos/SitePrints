@@ -1,121 +1,102 @@
-/**
- * searchHistory.ts — Service to manage search history in localStorage
- */
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-export type BusinessType = 'Restaurante' | 'Varejo' | 'Serviços' | 'Saúde' | 'Educação' | 'Automóveis' | 'Hotel' | 'Academia' | string
+export type SearchHistoryItem = {
+    id: string;
+    sessionId: string;
+    query: string;
+    location: string;
+    timestamp: Date;
+    radiusKm: number;
+    types: string[];
+    additionalFilters: string[];
+    resultsFound: number;
+    leadsCaptured: number;
+    searchMode: 'simple' | 'mass';
+    categories?: string[];
+};
 
-export interface SearchHistoryItem {
-    id: string
-    query: string
-    location: string
-    timestamp: Date
-    radiusKm: number
-    types: BusinessType[]
-    additionalFilters: string[]
-    resultsFound: number
-    leadsCaptured: number
-    sessionId: string
-    searchMode: 'simple' | 'mass'
-    categories?: string[]
-}
+export type DateGroup = 'Hoje' | 'Ontem' | 'Última Semana' | 'Últimos 30 Dias';
 
-const HISTORY_STORAGE_KEY = 'crm_search_history'
+export const getDateGroup = (date: Date): DateGroup => {
+    const now = new Date();
+    const diff = (now.getTime() - date.getTime()) / 1000 / 60 / 60 / 24;
+    
+    if (diff < 1) return 'Hoje';
+    if (diff < 2) return 'Ontem';
+    if (diff < 7) return 'Última Semana';
+    return 'Últimos 30 Dias';
+};
 
-export const searchHistoryService = {
+export const relativeTime = (date: Date): string => {
+    return format(date, "HH:mm", { locale: ptBR });
+};
+
+export const exportHistoryCSV = (items: SearchHistoryItem[]) => {
+    const headers = ['Query', 'Localização', 'Data', 'Resultados', 'Leads', 'Modo'];
+    const rows = items.map(i => [
+        i.query,
+        i.location,
+        i.timestamp.toLocaleString('pt-BR'),
+        i.resultsFound,
+        i.leadsCaptured,
+        i.searchMode
+    ]);
+    
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `historico_buscas_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+class SearchHistoryService {
+    private STORAGE_KEY = 'search_history_v1';
+
     getHistory(): SearchHistoryItem[] {
-        const stored = localStorage.getItem(HISTORY_STORAGE_KEY)
-        if (!stored) return []
+        const stored = localStorage.getItem(this.STORAGE_KEY);
+        if (!stored) return [];
         try {
-            const parsed = JSON.parse(stored)
+            const parsed = JSON.parse(stored);
             return parsed.map((item: any) => ({
                 ...item,
                 timestamp: new Date(item.timestamp)
-            }))
+            }));
         } catch (e) {
-            console.error('Failed to parse search history', e)
-            return []
+            console.error('Failed to parse search history', e);
+            return [];
         }
-    },
+    }
 
-    saveHistoryItem(item: Omit<SearchHistoryItem, 'id' | 'timestamp' | 'sessionId' | 'leadsCaptured'>): SearchHistoryItem {
-        const history = this.getHistory()
+    saveHistoryItem(item: Omit<SearchHistoryItem, 'id' | 'sessionId' | 'timestamp' | 'leadsCaptured'>): SearchHistoryItem {
+        const history = this.getHistory();
         const newItem: SearchHistoryItem = {
             ...item,
-            id: `sh-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            id: Math.random().toString(36).substring(2, 9),
+            sessionId: Math.random().toString(36).substring(2, 15),
             timestamp: new Date(),
-            sessionId: `sess-${Date.now()}`,
-            leadsCaptured: 0,
-        }
-        history.unshift(newItem)
-        // Keep only last 100 items
-        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.slice(0, 100)))
-        return newItem
-    },
+            leadsCaptured: 0
+        };
+        
+        const updated = [newItem, ...history].slice(0, 100); // Limit to 100 items
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(updated));
+        return newItem;
+    }
 
-    deleteHistoryItem(id: string): void {
-        const history = this.getHistory()
-        const filtered = history.filter(h => h.id !== id)
-        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(filtered))
-    },
+    deleteHistoryItem(id: string) {
+        const history = this.getHistory();
+        const updated = history.filter(i => i.id !== id);
+        localStorage.setItem(this.STORAGE_KEY, JSON.stringify(updated));
+    }
 
-    clearHistory(): void {
-        localStorage.removeItem(HISTORY_STORAGE_KEY)
-    },
-
-    incrementLeadsCaptured(sessionId: string): void {
-        const history = this.getHistory()
-        const index = history.findIndex(h => h.sessionId === sessionId)
-        if (index !== -1) {
-            history[index].leadsCaptured += 1
-            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history))
-        }
+    clearHistory() {
+        localStorage.removeItem(this.STORAGE_KEY);
     }
 }
 
-/** Group items by date category */
-export type DateGroup = 'Hoje' | 'Ontem' | 'Última Semana' | 'Últimos 30 Dias'
-
-export function getDateGroup(ts: Date): DateGroup {
-    const now = new Date()
-    const diffH = (now.getTime() - ts.getTime()) / 3_600_000
-    if (diffH < 24 && now.getDate() === ts.getDate()) return 'Hoje'
-    if (diffH < 48 && (now.getDate() - ts.getDate() === 1 || ts.getDate() - now.getDate() > 27)) return 'Ontem'
-    if (diffH < 168) return 'Última Semana'
-    return 'Últimos 30 Dias'
-}
-
-/** Friendly relative time label */
-export function relativeTime(ts: Date): string {
-    const now = new Date()
-    const diffM = Math.floor((now.getTime() - ts.getTime()) / 60_000)
-    if (diffM < 1) return 'agora mesmo'
-    if (diffM < 60) return `${diffM} min atrás`
-    const diffH = Math.floor(diffM / 60)
-    if (diffH < 24) return `${diffH}h atrás`
-    const diffD = Math.floor(diffH / 24)
-    return `${diffD} dia${diffD > 1 ? 's' : ''} atrás`
-}
-
-/** Export search history to CSV (browser download) */
-export function exportHistoryCSV(items: SearchHistoryItem[]) {
-    const header = 'ID,Consulta,Local,Data/Hora,Modo,Tipos/Categorias,Resultados,Leads Capturados'
-    const rows = items.map(i =>
-        [
-            i.id,
-            `"${i.query}"`,
-            `"${i.location}"`,
-            i.timestamp.toLocaleString('pt-BR'),
-            i.searchMode,
-            `"${i.searchMode === 'mass' ? i.categories?.join('; ') : i.types.join('; ')}"`,
-            i.resultsFound,
-            i.leadsCaptured,
-        ].join(',')
-    )
-    const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'historico-buscas.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-}
+export const searchHistoryService = new SearchHistoryService();

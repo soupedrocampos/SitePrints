@@ -1,3 +1,3 @@
 BEGIN;
-    DROP TABLE gmaps_jobs;
+    DROP TABLE IF EXISTS gmaps_jobs;
 COMMIT;

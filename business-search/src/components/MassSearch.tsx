@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, MapPin, ChevronDown, Clock, X, Sliders, Loader2, CheckSquare, Square, Layers, Zap, Turtle } from 'lucide-react'
 import { searchService } from '../services/search'
@@ -65,7 +65,6 @@ const CATEGORIES_GROUPS = [
             { id: 'bowling_alley', label: 'Boliche' },
             { id: 'casino', label: 'Cassino' },
             { id: 'comedy_club', label: 'Clube de Comédia' },
-            { id: 'convention_center', label: 'Centro de Convenções' },
             { id: 'movie_theater', label: 'Cinema' },
             { id: 'night_club', label: 'Balada/Boate' },
             { id: 'zoo', label: 'Zoológico' },
@@ -141,7 +140,7 @@ const CATEGORIES_GROUPS = [
             { id: 'tailor', label: 'Costureiro' },
             { id: 'locksmith', label: 'Chaveiro' },
             { id: 'moving_company', label: 'Mudanças' },
-            { id: 'plumber', label: 'Enanador' },
+            { id: 'plumber', label: 'Encanador' },
             { id: 'electrician', label: 'Eletricista' },
             { id: 'painter', label: 'Pintor' },
             { id: 'roofing_contractor', label: 'Telhadista/Calheiro' },
@@ -168,8 +167,7 @@ const CATEGORIES_GROUPS = [
             { id: 'bicycle_store', label: 'Loja de Bicicleta' },
             { id: 'book_store', label: 'Livraria' },
             { id: 'gift_shop', label: 'Loja de Presentes' },
-            { id: 'sporting_goods_store', label: 'Artigos Esportivos' },
-            { id: 'pet_store', label: 'Pet Shop' }
+            { id: 'sporting_goods_store', label: 'Artigos Esportivos' }
         ]
     },
     {
@@ -207,7 +205,7 @@ const CATEGORIES_GROUPS = [
     }
 ]
 
-const ALL_CATEGORIES = CATEGORIES_GROUPS.flatMap(g => g.items.map(i => i.id))
+const ALL_CATEGORIES = [...new Set(CATEGORIES_GROUPS.flatMap(g => g.items.map(i => i.id)))]
 
 /* ─── CEP regex ─────── */
 const CEP_RE = /^\d{5}-?\d{3}$/
@@ -256,6 +254,7 @@ export default function MassSearch({ onResults, isLoading, setIsLoading, externa
     const isPausedRef = useRef(false)
     const accumulatedRef = useRef<Business[]>([])
     const seenIdsRef = useRef(new Set<string>())
+    const hasAutoRunRef = useRef(false)
 
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -283,7 +282,7 @@ export default function MassSearch({ onResults, isLoading, setIsLoading, externa
         }
     }
 
-    const handleSearch = async (resume = false) => {
+    const handleSearch = useCallback(async (resume = false) => {
         if (!externalLocation.trim() || selectedCategories.length === 0) return
         
         setIsLoading(true)
@@ -343,7 +342,7 @@ export default function MassSearch({ onResults, isLoading, setIsLoading, externa
             setIsLoading(false)
             isRunningRef.current = false
         }
-    }
+    }, [externalLocation, selectedCategories, useFreeScraper, onResults, setIsLoading])
 
     const handlePause = () => {
         setIsPaused(true)
@@ -364,12 +363,20 @@ export default function MassSearch({ onResults, isLoading, setIsLoading, externa
     }
 
     useEffect(() => {
-        if (searchParams.get('run') === '1' && searchParams.get('mass') === 'true' && externalLocation && selectedCategories.length > 0) {
+        if (
+            !hasAutoRunRef.current &&
+            searchParams.get('run') === '1' &&
+            searchParams.get('mass') === 'true' &&
+            externalLocation &&
+            selectedCategories.length > 0
+        ) {
+            hasAutoRunRef.current = true
             handleSearch()
-            searchParams.delete('run')
-            setSearchParams(searchParams, { replace: true })
+            const next = new URLSearchParams(searchParams)
+            next.delete('run')
+            setSearchParams(next, { replace: true })
         }
-    }, [])
+    }, [searchParams, externalLocation, selectedCategories, handleSearch, setSearchParams])
 
     return (
         <div className="glass rounded-2xl p-6 flex flex-col gap-6">
@@ -402,7 +409,13 @@ export default function MassSearch({ onResults, isLoading, setIsLoading, externa
             </div>
 
             {/* Free Scraper Toggle (Moved Up) */}
-            <div className="flex items-center justify-between p-4 rounded-xl border border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-800/50 transition-colors" onClick={() => setUseFreeScraper(!useFreeScraper)}>
+            <button
+                type="button"
+                aria-pressed={useFreeScraper}
+                aria-label="Usar raspador gratuito"
+                className="flex items-center justify-between w-full p-4 rounded-xl border border-slate-700/50 bg-slate-800/30 cursor-pointer hover:bg-slate-800/50 transition-colors text-left"
+                onClick={() => setUseFreeScraper(!useFreeScraper)}
+            >
                 <div className="flex gap-3 items-center">
                     <div className={`p-2.5 rounded-lg transition-colors ${useFreeScraper ? 'bg-amber-500/20 text-amber-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
                         {useFreeScraper ? <Turtle size={18} /> : <Zap size={18} />}
@@ -419,7 +432,7 @@ export default function MassSearch({ onResults, isLoading, setIsLoading, externa
                 <div className={`w-10 h-5 rounded-full relative transition-colors ${useFreeScraper ? 'bg-amber-500' : 'bg-slate-600'}`}>
                     <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 shadow-sm transition-all ${useFreeScraper ? 'left-[22px]' : 'left-0.5'}`} />
                 </div>
-            </div>
+            </button>
 
             {/* Warning Info */}
             <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3 items-start">
@@ -491,7 +504,7 @@ export default function MassSearch({ onResults, isLoading, setIsLoading, externa
                         />
                     </div>
                     <p className="text-[10px] text-slate-500 text-center italic">
-                        {accumulatedRef.current.length} leads únicos encontrados até agora.
+                        {accumulatedResults.length} leads únicos encontrados até agora.
                     </p>
                 </div>
             )}

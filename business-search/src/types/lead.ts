@@ -72,6 +72,12 @@ export interface Lead {
     placesData?: GooglePlacesData
     activities?: Activity[]
     dataQuality?: DataQuality
+    /**
+     * sessionId links this lead to a specific search session (not a personal user ID).
+     * It is used solely to filter/group leads by which search run produced them.
+     * No personally-identifiable information is stored here; leads should be
+     * deleted or anonymized according to your data-retention policy.
+     */
     sessionId?: string
 }
 

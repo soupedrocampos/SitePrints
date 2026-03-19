@@ -39,15 +39,17 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 	datapath := filepath.Join(s.dataFolder, id+".csv")
 
-	if _, err := os.Stat(datapath); err == nil {
-		if err := os.Remove(datapath); err != nil {
-			return err
-		}
-	} else if !os.IsNotExist(err) {
+	// delete from database first
+	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
 
-	return s.repo.Delete(ctx, id)
+	// then delete file
+	if err := os.Remove(datapath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) Update(ctx context.Context, job *Job) error {
@@ -65,8 +67,11 @@ func (s *Service) GetCSV(_ context.Context, id string) (string, error) {
 
 	datapath := filepath.Join(s.dataFolder, id+".csv")
 
-	if _, err := os.Stat(datapath); os.IsNotExist(err) {
-		return "", fmt.Errorf("csv file not found for job %s", id)
+	if _, err := os.Stat(datapath); err != nil {
+		if os.IsNotExist(err) {
+			return "", fmt.Errorf("csv file not found for job %s", id)
+		}
+		return "", err
 	}
 
 	return datapath, nil
