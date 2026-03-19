@@ -72,6 +72,7 @@ export interface Lead {
     placesData?: GooglePlacesData
     activities?: Activity[]
     dataQuality?: DataQuality
+    sessionId?: string
 }
 
 export interface LeadFilters {
@@ -84,6 +85,7 @@ export interface LeadFilters {
     qualityMin: number
     qualityMax: number
     onlyWithWebsite: boolean
+    sessionId?: string
 }
 
 export type SortField = 'name' | 'status' | 'quality' | 'city' | 'created_at' | 'whatsapp'

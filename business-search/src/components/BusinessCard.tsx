@@ -1,122 +1,149 @@
-import { Star, MapPin, Phone, ExternalLink, Globe } from 'lucide-react'
-import { Business } from '../types/business'
+import React, { useState } from 'react'
+import { 
+    MapPin, Globe, Phone, Star, Plus, 
+    ExternalLink, Check, ShieldCheck,
+    Navigation
+} from 'lucide-react'
+import type { Business } from '../types'
+import { leadsService } from '../services/leads'
+import { formatLocationWithFlag } from '../utils/flags'
 
 interface BusinessCardProps {
     business: Business
-    onCapture: (business: Business) => void
-    isCaptured: boolean
+    sessionId?: string
 }
 
-const typeColors: Record<string, string> = {
-    Restaurante: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
-    Hotel: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-    Varejo: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-    Serviços: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
-    Saúde: 'bg-green-500/20 text-green-300 border-green-500/30',
-    Educação: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-}
+export function BusinessCard({ business, sessionId }: BusinessCardProps) {
+    const [isCaptured, setIsCaptured] = useState(false)
+    const [isCapturing, setIsCapturing] = useState(false)
 
-function StarRating({ rating }: { rating: number }) {
+    const handleCapture = async () => {
+        setIsCapturing(true)
+        try {
+            // Determine source
+            const source = business.source === 'Raspador Gratuito' ? 'Import' : 'Google Maps'
+            
+            await leadsService.createLead({
+                companyName: business.name,
+                cnpj: 'Pendente',
+                website: business.website || undefined,
+                phone: business.phone || undefined,
+                address: business.address,
+                city: business.city || '',
+                state: business.state || '',
+                source: source as any,
+                sessionId: sessionId
+            })
+            setIsCaptured(true)
+        } catch (error) {
+            console.error('Capture error:', error)
+        } finally {
+            setIsCapturing(false)
+        }
+    }
+
+    const googleMapsUrl = business.place_id 
+        ? `https://www.google.com/maps/search/?api=1&query=google&query_place_id=${business.place_id}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${business.address}`)}`
+
     return (
-        <div className="flex items-center gap-1">
-            {[1, 2, 3, 4, 5].map((i) => (
-                <Star
-                    key={i}
-                    size={13}
-                    className={i <= Math.round(rating) ? 'star-filled fill-yellow-400' : 'star-empty'}
-                />
-            ))}
-            <span className="text-xs text-slate-400 ml-1 font-medium">{rating.toFixed(1)}</span>
-        </div>
-    )
-}
-
-export default function BusinessCard({ business, onCapture, isCaptured }: BusinessCardProps) {
-    const badgeClass = typeColors[business.type] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'
-
-    return (
-        <div className="fade-in glass rounded-2xl p-5 flex flex-col gap-3 hover:border-indigo-500/30 transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/5 group">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-2">
-                <h3 className="text-sm font-semibold text-white leading-tight group-hover:text-indigo-300 transition-colors line-clamp-2">
-                    {business.name}
-                </h3>
-                <span className={`shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full border ${badgeClass}`}>
-                    {business.type}
-                </span>
-            </div>
-
-            {/* Rating */}
-            {business.rating != null && <StarRating rating={business.rating} />}
-
-            {/* Details */}
-            <div className="flex flex-col gap-1.5 text-xs text-slate-400">
-                <div className="flex items-start gap-1.5">
-                    <MapPin size={12} className="mt-0.5 shrink-0 text-indigo-400" />
-                    <span className="line-clamp-2">{business.address}</span>
-                </div>
-                {business.phone && (
-                    <div className="flex items-center gap-1.5">
-                        <Phone size={12} className="shrink-0 text-indigo-400" />
-                        <span>{business.phone}</span>
+        <div className="group bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-[2rem] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:shadow-indigo-500/10 hover:-translate-y-2 flex flex-col h-full">
+            <div className="p-6 sm:p-8 space-y-6 flex-1">
+                {/* Header: Name and Rating */}
+                <div className="space-y-4">
+                    <div className="flex justify-between items-start gap-4">
+                        <h3 className="text-xl font-black text-slate-900 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-600 transition-colors">
+                            {business.name}
+                        </h3>
+                        {business.rating && (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/30 rounded-xl">
+                                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                                <span className="text-sm font-black text-amber-700 dark:text-amber-400 tabular-nums">{business.rating}</span>
+                            </div>
+                        )}
                     </div>
-                )}
-            </div>
 
-            {/* Site status */}
-            {business.accessible != null && (
-                <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${business.accessible ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                    <span className="text-[11px] text-slate-500">
-                        {business.accessible
-                            ? `Site online · ${business.response_time?.toFixed(0)}ms`
-                            : `Site offline · ${business.status_code ?? 'Timeout'}`}
-                    </span>
+                    <div className="flex flex-wrap gap-2">
+                        <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg text-[10px] font-black uppercase tracking-widest">{business.type}</span>
+                        {business.source && (
+                           <span className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
+                              <ShieldCheck className="w-3 h-3" />
+                              {business.source}
+                           </span>
+                        )}
+                    </div>
                 </div>
-            )}
 
-            {/* Actions & Links */}
-            <div className="flex flex-col gap-2 mt-auto pt-1">
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => onCapture(business)}
-                        className={`flex-1 text-xs font-semibold py-2 px-3 rounded-xl transition-all duration-200 ${isCaptured
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-default'
-                            : 'bg-indigo-600 hover:bg-indigo-500 text-white hover:shadow-md hover:shadow-indigo-500/20 active:scale-95'
-                            }`}
-                    >
-                        {isCaptured ? '✓ Lead Capturado' : 'Capturar Lead'}
-                    </button>
+                {/* Details List */}
+                <div className="grid grid-cols-1 gap-4">
+                    <div className="flex items-start gap-3 group/info">
+                        <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-400 group-hover/info:text-indigo-500 transition-colors">
+                            <MapPin className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-bold text-slate-600 dark:text-slate-300 leading-snug">
+                            {formatLocationWithFlag(business.address)}
+                        </span>
+                    </div>
+
+                    {business.phone && (
+                        <div className="flex items-center gap-3 group/info">
+                            <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-400 group-hover/info:text-blue-500 transition-colors">
+                                <Phone className="w-4 h-4" />
+                            </div>
+                            <span className="text-sm font-bold text-slate-600 dark:text-slate-300">{business.phone}</span>
+                        </div>
+                    )}
+
                     {business.website && (
-                        <a
-                            href={business.website}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 rounded-xl border border-slate-700 hover:border-indigo-500/50 text-slate-400 hover:text-indigo-400 transition-all duration-200"
-                            title="Abrir website principal"
-                        >
-                            {business.accessible ? <ExternalLink size={14} /> : <Globe size={14} />}
-                        </a>
+                        <div className="flex items-center gap-3 group/info">
+                            <div className="p-2 bg-slate-50 dark:bg-slate-800 rounded-xl text-slate-400 group-hover/info:text-emerald-500 transition-colors">
+                                <Globe className="w-4 h-4" />
+                            </div>
+                            <a 
+                                href={business.website} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:underline truncate"
+                            >
+                                {business.website.replace(/^https?:\/\/(www\.)?/, '')}
+                            </a>
+                        </div>
                     )}
                 </div>
+            </div>
 
-                {/* Additional Links */}
-                {business.links && business.links.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1 border-t border-slate-800/50 mt-1">
-                        {business.links.map((link, idx) => (
-                            <a
-                                key={idx}
-                                href={link.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-700/50 hover:border-cyan-500/50 text-[10px] text-slate-400 hover:text-cyan-300 transition-all duration-200 bg-slate-800/30"
-                                title={link.url}
-                            >
-                                <Globe size={10} className="text-cyan-500/70" />
-                                <span>{link.label}</span>
-                            </a>
-                        ))}
+            {/* Action Bar */}
+            <div className="p-6 sm:p-8 pt-0 flex gap-3">
+                <a
+                    href={googleMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 px-6 py-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl font-bold flex items-center justify-center gap-2.5 transition-all hover:border-indigo-500 hover:text-indigo-600 shadow-sm active:scale-95 group/btn"
+                >
+                    <Navigation className="w-4 h-4 transition-transform group-hover/btn:-translate-y-0.5 group-hover/btn:translate-x-0.5" />
+                    Ver no Maps
+                </a>
+
+                {isCaptured ? (
+                    <div className="flex-[1.5] flex items-center justify-center gap-2.5 px-6 py-4 bg-emerald-50 content-dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl font-bold border border-emerald-200 dark:border-emerald-800/50 animate-in zoom-in-95 duration-300">
+                        <Check className="w-5 h-5" />
+                        Capturado
                     </div>
+                ) : (
+                    <button
+                        onClick={handleCapture}
+                        disabled={isCapturing}
+                        className="flex-[1.5] px-6 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-bold flex items-center justify-center gap-2.5 transition-all hover:bg-black dark:hover:bg-slate-100 hover:scale-[1.02] shadow-xl shadow-slate-900/20 active:scale-95 disabled:opacity-50"
+                    >
+                        {isCapturing ? (
+                           <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                           <>
+                              <Plus className="w-4 h-4" />
+                              Capturar Lead
+                           </>
+                        )}
+                    </button>
                 )}
             </div>
         </div>
