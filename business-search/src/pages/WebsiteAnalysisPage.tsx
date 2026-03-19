@@ -12,6 +12,19 @@ import {
     type SiteAnalysis, type SiteStatus
 } from '../lib/websiteAnalysisData'
 
+const ANALYSIS_HISTORY_KEY = 'analysis_history'
+
+interface AnalysisHistoryEntry {
+    id: string
+    timestamp: string
+    label: string   // ex: "19/03 14:35 — 12 sites"
+    total: number
+    ok: number
+    warnings: number
+    errors: number
+    sites: SiteAnalysis[]
+}
+
 /* ─── Types ────────────────────────── */
 type SortKey = 'status' | 'responseTime' | 'quality' | 'name'
 type SortDir = 'asc' | 'desc'
@@ -288,12 +301,14 @@ function SiteAnalysisCard({ site, onSelect, onExpand }: {
 
 /* ─── Filter Sidebar ───────────────── */
 function FilterSidebar({
-    filters, onChange, onReset, counts
+    filters, onChange, onReset, counts, history, onLoadHistory
 }: {
     filters: Filters
     onChange: (f: Partial<Filters>) => void
     onReset: () => void
     counts: Record<SiteStatus, number>
+    history: AnalysisHistoryEntry[]
+    onLoadHistory: (sites: SiteAnalysis[]) => void
 }) {
     const statuses: { key: SiteStatus; label: string; icon: React.ReactNode; count: number }[] = [
         { key: 'ok', label: 'OK', icon: <CheckCircle2 size={13} className="text-emerald-400" />, count: counts.ok },
@@ -366,6 +381,43 @@ function FilterSidebar({
                     )
                 })}
             </div>
+
+            {/* Histórico */}
+            {history.length > 0 && (
+                <div className="glass rounded-xl p-4">
+                    <h3 className="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-1.5">
+                        <Clock size={12} /> Histórico
+                    </h3>
+                    <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+                        {history.map(entry => (
+                            <button
+                                key={entry.id}
+                                onClick={() => onLoadHistory(entry)}
+                                className="w-full text-left px-3 py-2 rounded-lg bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-indigo-500/40 transition-all group"
+                            >
+                                <p className="text-[10px] text-slate-300 group-hover:text-white font-medium truncate mb-1">
+                                    {entry.label}
+                                </p>
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-[10px] text-emerald-400 flex items-center gap-0.5">
+                                        <CheckCircle2 size={9} /> {entry.ok}
+                                    </span>
+                                    {entry.warnings > 0 && (
+                                        <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
+                                            <AlertTriangle size={9} /> {entry.warnings}
+                                        </span>
+                                    )}
+                                    {entry.errors > 0 && (
+                                        <span className="text-[10px] text-red-400 flex items-center gap-0.5">
+                                            <XCircle size={9} /> {entry.errors}
+                                        </span>
+                                    )}
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Reset */}
             <button onClick={onReset} className="text-xs text-slate-600 hover:text-slate-400 transition-colors py-1">
@@ -500,13 +552,44 @@ export default function WebsiteAnalysisPage() {
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const hasStartedRef = useRef(false)
 
+    const [history, setHistory] = useState<AnalysisHistoryEntry[]>(() => {
+        try { return JSON.parse(localStorage.getItem(ANALYSIS_HISTORY_KEY) || '[]') }
+        catch { return [] }
+    })
+
+    const saveToHistory = useCallback((results: SiteAnalysis[]) => {
+        if (results.length === 0) return
+        const now = new Date()
+        const label = `${now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} — ${results.length} sites`
+        const entry: AnalysisHistoryEntry = {
+            id: crypto.randomUUID(),
+            timestamp: now.toISOString(),
+            label,
+            total: results.length,
+            ok: results.filter(r => r.status === 'ok').length,
+            warnings: results.filter(r => r.status === 'warning' || r.status === 'ssl_issue').length,
+            errors: results.filter(r => r.status === 'error').length,
+            sites: results,
+        }
+        setHistory(prev => {
+            const next = [entry, ...prev].slice(0, 20)
+            localStorage.setItem(ANALYSIS_HISTORY_KEY, JSON.stringify(next))
+            return next
+        })
+    }, [])
+
     /* ─── Real analysis ─── */
-    const runAnalysis = useCallback(async (sites: { id: string, businessName: string, website: string }[]) => {
+    const runAnalysis = useCallback(async (
+        sites: { id: string, businessName: string, website: string }[],
+        mode: 'full' | 'partial' = 'full'
+    ) => {
         if (isAnalyzing || sites.length === 0) return
         setIsAnalyzing(true)
-        setData([])
 
-        const results: SiteAnalysis[] = []
+        // No modo 'full' limpa tudo; no modo 'partial' mantém os resultados existentes
+        if (mode === 'full') setData([])
+
+        const newResults: SiteAnalysis[] = []
 
         for (let i = 0; i < sites.length; i++) {
             const site = sites[i]
@@ -521,8 +604,16 @@ export default function WebsiteAnalysisPage() {
                     analyzedAt: response.data.analyzedAt || new Date().toISOString(),
                     selected: false
                 }
-                results.push(result)
-                setData(prev => [...prev, result])
+                newResults.push(result)
+                setData(prev => {
+                    const idx = prev.findIndex(d => d.id === result.id)
+                    if (idx !== -1) {
+                        const next = [...prev]
+                        next[idx] = result
+                        return next
+                    }
+                    return [...prev, result]
+                })
             } catch (err) {
                 console.error('Analysis error:', err)
                 const fallback: SiteAnalysis = {
@@ -553,14 +644,30 @@ export default function WebsiteAnalysisPage() {
                     analyzedAt: new Date().toISOString(),
                     screenshotError: 'Falha na conexão com o servidor de análise'
                 }
-                results.push(fallback)
-                setData(prev => [...prev, fallback])
+                newResults.push(fallback)
+                setData(prev => {
+                    const idx = prev.findIndex(d => d.id === fallback.id)
+                    if (idx !== -1) {
+                        const next = [...prev]
+                        next[idx] = fallback
+                        return next
+                    }
+                    return [...prev, fallback]
+                })
             }
         }
 
         setIsAnalyzing(false)
         setAnalyzeProgress(prev => ({ ...prev, current: sites.length }))
-    }, [isAnalyzing])
+
+        // Salvar no histórico apenas em análise completa
+        if (mode === 'full') {
+            setData(current => {
+                saveToHistory(current)
+                return current
+            })
+        }
+    }, [isAnalyzing, saveToHistory])
 
 
 
@@ -571,7 +678,7 @@ export default function WebsiteAnalysisPage() {
         const pending = sessionStorage.getItem('pending_analysis')
         if (pending) {
             hasStartedRef.current = true
-            sessionStorage.removeItem('pending_analysis') // Remove immediately to prevent multi-tabs/strict-mode from repeating
+            sessionStorage.removeItem('pending_analysis')
             try {
                 const sites = JSON.parse(pending)
                 if (Array.isArray(sites) && sites.length > 0) {
@@ -580,6 +687,18 @@ export default function WebsiteAnalysisPage() {
             } catch (e) {
                 console.error('Failed to parse pending analysis', e)
             }
+        } else {
+            // Sem nova análise pendente: restaurar a última sessão salva
+            try {
+                const raw = localStorage.getItem(ANALYSIS_HISTORY_KEY)
+                if (raw) {
+                    const entries: AnalysisHistoryEntry[] = JSON.parse(raw)
+                    if (entries.length > 0) {
+                        hasStartedRef.current = true
+                        setData(entries[0].sites.map(s => ({ ...s, selected: false })))
+                    }
+                }
+            } catch { /* histórico inválido, ignorar */ }
         }
     }, [runAnalysis])
 
@@ -590,6 +709,15 @@ export default function WebsiteAnalysisPage() {
 
     const clearSelection = useCallback(() => {
         setData(prev => prev.map(d => ({ ...d, selected: false })))
+    }, [])
+
+    const loadFromHistory = useCallback((entry: AnalysisHistoryEntry) => {
+        setData(entry.sites.map(s => ({ ...s, selected: false })))
+        setFilters(DEFAULT_FILTERS)
+    }, [])
+
+    const selectAll = useCallback(() => {
+        setData(prev => prev.map(d => ({ ...d, selected: true })))
     }, [])
 
     /* ─── Filters ─── */
@@ -672,6 +800,22 @@ export default function WebsiteAnalysisPage() {
 
                 {/* Actions & Filters */}
                 <div className="flex items-center gap-2 mb-6 justify-end">
+                    {data.some(d => d.status === 'error') && (
+                        <button
+                            onClick={() => {
+                                const errorSites = data
+                                    .filter(d => d.status === 'error')
+                                    .map(d => ({ id: d.id, businessName: d.businessName, website: d.website }))
+                                runAnalysis(errorSites, 'partial')
+                            }}
+                            disabled={isAnalyzing}
+                            className="flex items-center gap-1.5 text-xs font-medium text-red-300 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 px-3 py-2 rounded-xl transition-all"
+                        >
+                            <RefreshCw size={13} className={isAnalyzing ? 'animate-spin' : ''} />
+                            Re-analisar Erros ({data.filter(d => d.status === 'error').length})
+                        </button>
+                    )}
+
                     {/* Filter toggle on mobile */}
                     <button onClick={() => setShowSidebar(v => !v)}
                         className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white border border-slate-700 px-3 py-2 rounded-xl hover:bg-slate-800 transition-all">
@@ -710,6 +854,16 @@ export default function WebsiteAnalysisPage() {
                         <SortBtn k="responseTime" label="Tempo" />
                         <SortBtn k="quality" label="Qualidade" />
                         <SortBtn k="name" label="Nome" />
+                        
+                        <div className="w-px h-4 bg-slate-700 mx-1" />
+                        
+                        <button
+                            onClick={selectAll}
+                            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white border border-slate-700 px-2.5 py-1.5 rounded-lg hover:bg-slate-800 transition-all"
+                        >
+                            <CheckCircle2 size={12} /> Selecionar Todos
+                        </button>
+
                         <span className="ml-auto text-xs text-slate-600">{filtered.length} de {data.length} sites</span>
                     </div>
                 )}
@@ -733,6 +887,8 @@ export default function WebsiteAnalysisPage() {
                                 onChange={updateFilter}
                                 onReset={() => setFilters(DEFAULT_FILTERS)}
                                 counts={statusCounts}
+                                history={history}
+                                onLoadHistory={loadFromHistory}
                             />
                         )}
                         <div className="flex-1 min-w-0">
