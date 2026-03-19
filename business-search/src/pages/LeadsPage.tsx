@@ -45,7 +45,7 @@ export default function LeadsPage() {
     const currentSession = useMemo(() => {
         if (!urlSessionId) return null
         const history = searchHistoryService.getHistory()
-        return history.find(h => h.sessionId === urlSessionId) || null
+        return history.find((h: SearchHistoryItem) => h.sessionId === urlSessionId) || null
     }, [urlSessionId])
 
     // Sync sessionId filter whenever the URL param changes
@@ -166,8 +166,8 @@ export default function LeadsPage() {
         if (analysisData.length === 0) {
             const withPlaceId = selectedLeads.filter(l => l.placesData?.placeId).length
             const msg = withPlaceId > 0
-                ? `Nenhum dos ${selectedLeads.length} leads selecionados possui website. Tente buscá-los novamente — o sistema tentou recuperar via Google Places mas não encontrou dados.`
-                : `Nenhum dos ${selectedLeads.length} leads selecionados possui website cadastrado. Edite os leads manualmente para adicionar o website.`
+                ? `Nenhum dos ${selectedLeads.length} leads selecionados possui website. O sistema tentou recuperar via Google Places mas não encontrou dados.`
+                : `Nenhum dos ${selectedLeads.length} leads selecionados possui website cadastrado. Edite os leads para adicionar o website.`
             alert(msg)
             return
         }
