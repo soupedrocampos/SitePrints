@@ -1,162 +1,106 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, MapPin, ChevronDown, Clock, X, Sliders, Loader2, CheckSquare, Square, Layers } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { 
+    Search, Play, Pause, X, Check, ChevronsRight, ChevronDown, ChevronRight, 
+    AlertCircle, Layers, Globe, Clock, CheckSquare, Square
+} from 'lucide-react'
 import { searchService } from '../services/search'
 import type { Business } from '../types'
+import { useMassSearchStore } from '../store/massSearchStore'
 
-interface MassSearchProps {
-    onResults: (results: Business[]) => void
-    isLoading: boolean
-    setIsLoading: (loading: boolean) => void
+interface CategoryGroup {
+    id: string
+    label: string
+    categories: string[]
 }
 
-const CATEGORIES_GROUPS = [
+const CATEGORY_GROUPS: CategoryGroup[] = [
     {
-        name: 'Automotivo & Transp.',
-        items: [
-            { id: 'car_dealer', label: 'Concessionária' },
-            { id: 'car_rental', label: 'Aluguel de Carro' },
-            { id: 'car_repair', label: 'Oficina Mecânica' },
-            { id: 'car_wash', label: 'Lava Jato' },
-            { id: 'gas_station', label: 'Posto de Gasolina' },
-            { id: 'parking', label: 'Estacionamento' },
-            { id: 'airport', label: 'Aeroporto' },
-            { id: 'bus_station', label: 'Rodoviária' },
-            { id: 'train_station', label: 'Estação de Trem' }
+        id: 'auto',
+        label: 'Automotivo',
+        categories: [
+            'Concessionária de Carros', 'Oficina Mecânica', 'Lava Jato', 
+            'Loja de Pneus', 'Aluguel de Carros', 'Posto de Gasolina'
         ]
     },
     {
-        name: 'Saúde & Bem-estar',
-        items: [
-            { id: 'dentist', label: 'Dentista' },
-            { id: 'doctor', label: 'Médico/Clínica' },
-            { id: 'hospital', label: 'Hospital' },
-            { id: 'pharmacy', label: 'Farmácia' },
-            { id: 'physiotherapist', label: 'Fisioterapeuta' },
-            { id: 'gym', label: 'Academia' },
-            { id: 'spa', label: 'Spa' },
-            { id: 'yoga_studio', label: 'Yoga' }
+        id: 'food',
+        label: 'Alimentação',
+        categories: [
+            'Restaurante', 'Cafeteria', 'Padaria', 'Pizzaria', 'Bar', 
+            'Hamburgueria', 'Sorveteria', 'Supermercado'
         ]
     },
     {
-        name: 'Alimentação',
-        items: [
-            { id: 'bakery', label: 'Padaria' },
-            { id: 'bar', label: 'Bar' },
-            { id: 'cafe', label: 'Café' },
-            { id: 'restaurant', label: 'Restaurante' },
-            { id: 'pizza_restaurant', label: 'Pizzaria' },
-            { id: 'hamburger_restaurant', label: 'Hamburgueria' },
-            { id: 'ice_cream_shop', label: 'Sorveteria' },
-            { id: 'steak_house', label: 'Churrascaria' },
-            { id: 'sushi_restaurant', label: 'Japonês' }
+        id: 'health',
+        label: 'Saúde',
+        categories: [
+            'Clínica Médica', 'Dentista', 'Farmácia', 'Academia', 
+            'Hospital', 'Laboratório', 'Veterinário', 'Psicólogo'
         ]
     },
     {
-        name: 'Serviços Profissionais',
-        items: [
-            { id: 'accounting', label: 'Contabilidade' },
-            { id: 'bank', label: 'Banco' },
-            { id: 'lawyer', label: 'Advogado' },
-            { id: 'real_estate_agency', label: 'Imobiliária' },
-            { id: 'insurance_agency', label: 'Seguradora' },
-            { id: 'consultant', label: 'Consultoria' },
-            { id: 'locksmith', label: 'Chaveiro' },
-            { id: 'moving_company', label: 'Mudanças' }
+        id: 'professional',
+        label: 'Serviços Profissionais',
+        categories: [
+            'Advogado', 'Contador', 'Imobiliária', 'Agência de Marketing', 
+            'Arquitetura', 'Engenharia', 'TI e Software'
         ]
     },
     {
-        name: 'Serviços Pessoais',
-        items: [
-            { id: 'beauty_salon', label: 'Salão de Beleza' },
-            { id: 'barber_shop', label: 'Barbearia' },
-            { id: 'hair_care', label: 'Cabelereiro' },
-            { id: 'laundry', label: 'Lavanderia' },
-            { id: 'veterinary_care', label: 'Veterinário' },
-            { id: 'pet_store', label: 'Pet Shop' },
-            { id: 'child_care', label: 'Creche' }
+        id: 'retail',
+        label: 'Varejo',
+        categories: [
+            'Loja de Roupas', 'Loja de Móveis', 'Eletrônicos', 'Pet Shop', 
+            'Livraria', 'Joalheria', 'Floricultura'
         ]
     },
     {
-        name: 'Compras',
-        items: [
-            { id: 'clothing_store', label: 'Loja de Roupas' },
-            { id: 'electronics_store', label: 'Eletrônicos' },
-            { id: 'furniture_store', label: 'Móveis' },
-            { id: 'grocery_store', label: 'Mercado' },
-            { id: 'supermarket', label: 'Supermercado' },
-            { id: 'shopping_mall', label: 'Shopping' },
-            { id: 'jewelry_store', label: 'Joalheria' },
-            { id: 'pet_store', label: 'Pet Shop' }
+        id: 'beauty',
+        label: 'Beleza e Bem-Estar',
+        categories: [
+            'Salão de Beleza', 'Barbearia', 'Spa', 'Estética'
         ]
     },
     {
-        name: 'Educação & Cultura',
-        items: [
-            { id: 'school', label: 'Escola' },
-            { id: 'university', label: 'Universidade' },
-            { id: 'library', label: 'Biblioteca' },
-            { id: 'art_gallery', label: 'Galeria de Arte' },
-            { id: 'museum', label: 'Museu' }
+        id: 'education',
+        label: 'Educação',
+        categories: [
+            'Escola', 'Faculdade', 'Curso de Idiomas', 'Escola de Música'
         ]
     },
     {
-        name: 'Hospedagem',
-        items: [
-            { id: 'hotel', label: 'Hotel' },
-            { id: 'motel', label: 'Motel' },
-            { id: 'resort_hotel', label: 'Resort' },
-            { id: 'guest_house', label: 'Pousada' }
+        id: 'home',
+        label: 'Casa e Construção',
+        categories: [
+            'Loja de Material de Construção', 'Marcenaria', 'Pintura', 
+            'Eletricista', 'Encanador', 'Decoração'
         ]
     }
 ]
 
-const ALL_CATEGORIES = CATEGORIES_GROUPS.flatMap(g => g.items.map(i => i.id))
-
-/* ─── CEP regex ─────── */
-const CEP_RE = /^\d{5}-?\d{3}$/
-
-/* ─── ViaCEP response ── */
-interface ViaCEPResponse {
-    localidade: string
-    uf: string
-    erro?: boolean
+interface MassSearchProps {
+    onResults: (results: Business[], total: number, sessionId: string, isPartial?: boolean) => void
+    isLoading: boolean
+    setIsLoading: (loading: boolean) => void
+    location: string
 }
 
-/* ─── Suggestion item ── */
-interface Suggestion {
-    label: string
-    sublabel?: string
-}
-
-const CITIES: Suggestion[] = [
-    { label: 'São Paulo', sublabel: 'SP' },
-    { label: 'Rio de Janeiro', sublabel: 'RJ' },
-    { label: 'Belo Horizonte', sublabel: 'MG' },
-    { label: 'Curitiba', sublabel: 'PR' },
-    { label: 'Porto Alegre', sublabel: 'RS' },
-    { label: 'Salvador', sublabel: 'BA' },
-    { label: 'Fortaleza', sublabel: 'CE' },
-    { label: 'Recife', sublabel: 'PE' },
-    { label: 'Barueri', sublabel: 'SP' },
-    { label: 'Osasco', sublabel: 'SP' },
-    { label: 'Guarulhos', sublabel: 'SP' },
-]
-
-export default function MassSearch({ onResults, isLoading, setIsLoading }: MassSearchProps) {
-    const [location, setLocation] = useState('')
+export function MassSearch({ onResults, isLoading, setIsLoading, location }: MassSearchProps) {
     const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+    const [expandedGroups, setExpandedGroups] = useState<string[]>(CATEGORY_GROUPS.map(g => g.id))
+    const [useFreeScraper, setUseFreeScraper] = useState(true)
     
-    // Location autocomplete state
-    const [suggestions, setSuggestions] = useState<Suggestion[]>([])
-    const [showSuggestions, setShowSuggestions] = useState(false)
-    const [locationLoading, setLocationLoading] = useState(false)
-    const [locationError, setLocationError] = useState('')
+    // Resume/Pause State
+    const [isPaused, setIsPaused] = useState(false)
+    const [currentCategoryIndex, setCurrentCategoryIndex] = useState(-1)
+    const [accumulatedResults, setAccumulatedResults] = useState<Business[]>([])
+    const [currentSessionId, setCurrentSessionId] = useState<string>('')
     
-    // Progress state
-    const [progress, setProgress] = useState({ current: 0, total: 0 })
-
-    const locationRef = useRef<HTMLDivElement>(null)
-    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Refs to avoid stale closures in loops
+    const isPausedRef = useRef(false)
+    const isRunningRef = useRef(false)
+    const currentResultsRef = useRef<Business[]>([])
+    const seenPlaceIdsRef = useRef<Set<string>>(new Set())
 
     const toggleCategory = (cat: string) => {
         setSelectedCategories(prev => 
@@ -164,273 +108,329 @@ export default function MassSearch({ onResults, isLoading, setIsLoading }: MassS
         )
     }
 
-    const toggleAll = () => {
-        if (selectedCategories.length === ALL_CATEGORIES.length) {
-            setSelectedCategories([])
+    const toggleGroup = (group: CategoryGroup) => {
+        const allInGroup = group.categories.every(cat => selectedCategories.includes(cat))
+        if (allInGroup) {
+            setSelectedCategories(prev => prev.filter(cat => !group.categories.includes(cat)))
         } else {
-            setSelectedCategories([...ALL_CATEGORIES])
+            setSelectedCategories(prev => {
+                const newCats = [...prev]
+                group.categories.forEach(cat => {
+                    if (!newCats.includes(cat)) newCats.push(cat)
+                })
+                return newCats
+            })
         }
     }
 
-    const toggleGroup = (groupIdIds: string[]) => {
-        const allInGroupSelected = groupIdIds.every(id => selectedCategories.includes(id))
-        if (allInGroupSelected) {
-            setSelectedCategories(prev => prev.filter(id => !groupIdIds.includes(id)))
-        } else {
-            const newSelection = new Set([...selectedCategories, ...groupIdIds])
-            setSelectedCategories(Array.from(newSelection))
-        }
+    const selectAll = () => {
+        const allCats = CATEGORY_GROUPS.flatMap(g => g.categories)
+        setSelectedCategories(allCats)
+    }
+
+    const clearSelection = () => {
+        setSelectedCategories([])
+        setAccumulatedResults([])
+        seenPlaceIdsRef.current = new Set()
     }
 
     const handleSearch = async () => {
-        if (!location.trim() || selectedCategories.length === 0) return
+        if (!location || selectedCategories.length === 0) return
         
         setIsLoading(true)
-        setProgress({ current: 0, total: 1 }) // Just indicating start
+        setIsPaused(false)
+        isPausedRef.current = false
+        isRunningRef.current = true
+        
+        // Reset or initialize session
+        const sessionId = currentSessionId || `mass-${Date.now()}`
+        if (!currentSessionId) {
+            setCurrentSessionId(sessionId)
+            setAccumulatedResults([])
+            currentResultsRef.current = []
+            seenPlaceIdsRef.current = new Set()
+        }
+
+        const startIndex = currentCategoryIndex === -1 ? 0 : currentCategoryIndex
         
         try {
-            const data = await searchService.massSearch(location, selectedCategories)
-            onResults(data.results)
-        } catch (error) {
-            console.error('Mass search failed:', error)
-        } finally {
+            for (let i = startIndex; i < selectedCategories.length; i++) {
+                // Check if paused
+                if (isPausedRef.current) {
+                    setCurrentCategoryIndex(i)
+                    isRunningRef.current = false
+                    setIsLoading(false)
+                    return
+                }
+
+                const cat = selectedCategories[i]
+                setCurrentCategoryIndex(i)
+
+                try {
+                    const response = await searchService.searchBusinesses({
+                        query: cat,
+                        location,
+                        radius: 5,
+                        useFreeScraper
+                    })
+
+                    // De-duplicate results
+                    const newUniqueResults: Business[] = []
+                    response.results.forEach(item => {
+                        if (!seenPlaceIdsRef.current.has(item.place_id)) {
+                            seenPlaceIdsRef.current.add(item.place_id)
+                            newUniqueResults.push(item)
+                        }
+                    })
+
+                    if (newUniqueResults.length > 0) {
+                        const updated = [...currentResultsRef.current, ...newUniqueResults]
+                        currentResultsRef.current = updated
+                        setAccumulatedResults(updated)
+                        // Send partial results to parent
+                        onResults(updated, updated.length, sessionId, true)
+                    }
+                } catch (err) {
+                    console.error(`Error searching ${cat}:`, err)
+                }
+                
+                // Small delay to prevent rate limit and allow state updates
+                await new Promise(r => setTimeout(r, 500))
+            }
+
+            // Finished all categories
             setIsLoading(false)
-            setProgress({ current: 0, total: 0 })
+            setCurrentCategoryIndex(-1)
+            setCurrentSessionId('')
+            isRunningRef.current = false
+            onResults(currentResultsRef.current, currentResultsRef.current.length, sessionId, false)
+            
+        } catch (error) {
+            console.error('Mass search error:', error)
+            setIsLoading(false)
+            isRunningRef.current = false
         }
     }
 
-    /* ─── CEP lookup via ViaCEP ─────────────────────────── */
-    const lookupCEP = useCallback(async (cep: string) => {
-        setLocationLoading(true)
-        setLocationError('')
-        try {
-            const clean = cep.replace(/\D/g, '')
-            const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`)
-            const data: ViaCEPResponse = await res.json()
-            if (data.erro) {
-                setLocationError('CEP não encontrado')
-                setSuggestions([])
-            } else {
-                const city = `${data.localidade}, ${data.uf}`
-                setLocation(city)
-                setSuggestions([])
-                setShowSuggestions(false)
-                setLocationError('')
-            }
-        } catch {
-            setLocationError('Erro ao buscar CEP')
-        } finally {
-            setLocationLoading(false)
-        }
-    }, [])
-
-    /* ─── Location input change handler ─────────────────── */
-    const handleLocationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value
-        setLocation(val)
-        setLocationError('')
-
-        if (debounceRef.current) clearTimeout(debounceRef.current)
-
-        const raw = val.replace(/\D/g, '')
-
-        if (raw.length >= 8 && /^\d+$/.test(raw)) {
-            const formatted = `${raw.slice(0, 5)}-${raw.slice(5, 8)}`
-            if (CEP_RE.test(formatted) || raw.length === 8) {
-                debounceRef.current = setTimeout(() => lookupCEP(raw), 600)
-                setSuggestions([])
-                setShowSuggestions(false)
-                return
-            }
-        }
-
-        if (val.trim().length >= 2) {
-            const lower = val.toLowerCase()
-            const filtered = CITIES.filter(
-                (c) =>
-                    c.label.toLowerCase().includes(lower) ||
-                    (c.sublabel && c.sublabel.toLowerCase().includes(lower))
-            ).slice(0, 7)
-            setSuggestions(filtered)
-            setShowSuggestions(filtered.length > 0)
-        } else {
-            setSuggestions([])
-            setShowSuggestions(false)
-        }
+    const handlePause = () => {
+        isPausedRef.current = true
+        setIsPaused(true)
     }
 
-    const pickSuggestion = (s: Suggestion) => {
-        const full = s.sublabel ? `${s.label}, ${s.sublabel}` : s.label
-        setLocation(full)
-        setSuggestions([])
-        setShowSuggestions(false)
+    const handleCancel = () => {
+        isRunningRef.current = false
+        isPausedRef.current = false
+        setIsPaused(false)
+        setIsLoading(false)
+        setCurrentCategoryIndex(-1)
+        setCurrentSessionId('')
+        setAccumulatedResults([])
+        seenPlaceIdsRef.current = new Set()
     }
 
-    useEffect(() => {
-        const handler = (e: MouseEvent) => {
-            if (locationRef.current && !locationRef.current.contains(e.target as Node)) {
-                setShowSuggestions(false)
-            }
-        }
-        document.addEventListener('mousedown', handler)
-        return () => document.removeEventListener('mousedown', handler)
-    }, [])
+    const progress = selectedCategories.length > 0 
+        ? Math.round(((currentCategoryIndex + 1) / selectedCategories.length) * 100) 
+        : 0
 
     return (
-        <div className="glass rounded-2xl p-6 flex flex-col gap-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-base font-semibold text-white flex items-center gap-2">
-                        <Layers size={18} className="text-indigo-400" />
-                        Busca em Massa
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Selecione múltiplas categorias para uma busca completa</p>
-                </div>
-                
-                <button 
-                    onClick={toggleAll}
-                    className="flex items-center gap-2 text-xs font-medium text-indigo-400 hover:text-indigo-300 transition-colors bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/20"
-                >
-                    {selectedCategories.length === ALL_CATEGORIES.length ? (
-                        <>
-                            <CheckSquare size={14} />
-                            Desmarcar Todos
-                        </>
-                    ) : (
-                        <>
-                            <Square size={14} />
-                            Selecionar Todos
-                        </>
-                    )}
-                </button>
-            </div>
+        <div className="space-y-6">
+            {/* Action Top Bar */}
+            <div className="bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-200/60 dark:border-slate-700/60 transition-all duration-300">
+                <div className="space-y-6">
+                    {/* Controls Row */}
+                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                onClick={() => setUseFreeScraper(!useFreeScraper)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
+                                    useFreeScraper 
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
+                                    : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                                }`}
+                            >
+                                <Globe className="w-4 h-4" />
+                                <span>Raspador Gratuito</span>
+                                <div className={`w-8 h-4 rounded-full relative transition-colors ${useFreeScraper ? 'bg-blue-400' : 'bg-slate-400'}`}>
+                                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${useFreeScraper ? 'right-0.5' : 'left-0.5'}`} />
+                                </div>
+                            </button>
 
-            {/* Categories Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {CATEGORIES_GROUPS.map((group) => {
-                    const groupIds = group.items.map(i => i.id)
-                    const allInGroupSelected = groupIds.every(id => selectedCategories.includes(id))
-                    
-                    return (
-                        <div key={group.name} className="space-y-3">
-                            <div className="flex items-center justify-between pr-2">
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1 border-l-2 border-indigo-500/50">
-                                    {group.name}
-                                </h3>
-                                <button 
-                                    onClick={() => toggleGroup(groupIds)}
-                                    className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all ${
-                                        allInGroupSelected 
-                                            ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-400' 
-                                            : 'bg-slate-800 border-slate-700 text-slate-500 hover:text-slate-300'
-                                    }`}
-                                >
-                                    {allInGroupSelected ? 'Desmarcar' : 'Selecionar'}
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                            {group.items.map((cat) => {
-                                const active = selectedCategories.includes(cat.id)
-                                return (
-                                    <button
-                                        key={cat.id}
-                                        onClick={() => toggleCategory(cat.id)}
-                                        className={`flex items-center gap-2 text-sm px-3 py-2 rounded-xl border transition-all text-left ${
-                                            active
-                                                ? 'bg-indigo-600/30 border-indigo-500/60 text-indigo-300'
-                                                : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:border-slate-600 hover:text-slate-300'
-                                        }`}
-                                    >
-                                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                            active ? 'bg-indigo-500 border-indigo-500' : 'border-slate-600'
-                                        }`}>
-                                            {active && <div className="w-2 h-2 bg-white rounded-full" />}
-                                        </div>
-                                        <span className="truncate">{cat.label}</span>
-                                    </button>
-                                )
-                            })}
-                            </div>
+                            {useFreeScraper && (
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/30 rounded-lg text-amber-700 dark:text-amber-400 text-xs animate-in slide-in-from-left-2 duration-300">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>Busca gratuita é mais lenta (~2-3 min por categoria)</span>
+                                </div>
+                            )}
                         </div>
-                    )
-                })}
-            </div>
 
-            {/* Location & Action */}
-            <div className="pt-4 border-t border-slate-700/50 flex flex-col md:flex-row gap-4 items-end">
-                <div className="flex-1 w-full" ref={locationRef}>
-                    <label className="text-xs font-medium text-slate-400 mb-1.5 block">
-                        Localização para Busca em Massa
-                    </label>
-                    <div className="relative">
-                        <MapPin size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                        <input
-                            type="text"
-                            value={location}
-                            onChange={handleLocationChange}
-                            placeholder="Ex: São Paulo, SP ou 01310-100"
-                            className={`w-full bg-slate-800/60 border rounded-xl pl-9 pr-9 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition-all ${
-                                locationError ? 'border-red-500/70' : 'border-slate-700 focus:border-indigo-500/70'
-                            }`}
-                        />
-                        {locationLoading && (
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                <Loader2 size={14} className="text-indigo-400 animate-spin" />
-                            </div>
-                        )}
-                        
-                        {showSuggestions && suggestions.length > 0 && (
-                            <div className="absolute bottom-full left-0 right-0 mb-2 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden z-20 shadow-xl">
-                                {suggestions.map((s, i) => (
-                                    <button
-                                        key={i}
-                                        onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s) }}
-                                        className="w-full text-left px-3 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 transition-colors flex items-center gap-2"
-                                    >
-                                        <MapPin size={12} className="text-slate-500 shrink-0" />
-                                        <span>{s.label}</span>
-                                        {s.sublabel && (
-                                            <span className="ml-auto text-[11px] text-slate-500 font-medium bg-slate-700/60 px-1.5 py-0.5 rounded">
-                                                {s.sublabel}
-                                            </span>
-                                        )}
-                                    </button>
-                                ))}
+                        {!useFreeScraper && selectedCategories.length > 0 && (
+                            <div className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 text-indigo-500" />
+                                <span>Previsão: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{selectedCategories.length * 20}</span> créditos</span>
                             </div>
                         )}
                     </div>
-                </div>
 
-                <button
-                    onClick={handleSearch}
-                    disabled={isLoading || !location.trim() || selectedCategories.length === 0}
-                    className="w-full md:w-auto px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2 min-w-[200px]"
-                >
-                    {isLoading ? (
-                        <>
-                            <Loader2 size={16} className="animate-spin" />
-                            Processando Massa...
-                        </>
-                    ) : (
-                        <>
-                            <Layers size={16} />
-                            Iniciar Busca em Massa
-                        </>
+                    <div className="flex flex-wrap items-center gap-3">
+                        {!isLoading && !isPaused ? (
+                            <button
+                                onClick={handleSearch}
+                                disabled={selectedCategories.length === 0 || !location}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-semibold shadow-xl shadow-blue-500/25 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 disabled:hover:scale-100 group"
+                            >
+                                <Play className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                Realizar Busca em Massa
+                            </button>
+                        ) : (
+                            <>
+                                {isLoading ? (
+                                    <button
+                                        onClick={handlePause}
+                                        className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-amber-500 text-white rounded-xl font-semibold shadow-lg shadow-amber-500/20 hover:bg-amber-600 transition-all"
+                                    >
+                                        <Pause className="w-5 h-5" />
+                                        Pausar Tudo
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleSearch}
+                                        className="flex-1 sm:flex-none flex items-center justify-center gap-3 px-8 py-3.5 bg-green-500 text-white rounded-xl font-semibold shadow-lg shadow-green-500/20 hover:bg-green-600 transition-all"
+                                    >
+                                        <Play className="w-5 h-5" />
+                                        Retomar
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleCancel}
+                                    className="px-4 py-3 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+                                    title="Cancelar busca e limpar progresso"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </>
+                        )}
+
+                        <div className="flex-1 flex gap-2">
+                            <button
+                                onClick={selectAll}
+                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+                            >
+                                Selecionar Tudo
+                            </button>
+                            <button
+                                onClick={clearSelection}
+                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+                            >
+                                Limpar
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Progress Area */}
+                    {(isLoading || isPaused || isRunningRef.current) && (
+                        <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-700/50 animate-in fade-in slide-in-from-top-2 duration-500">
+                            <div className="flex items-center justify-between text-sm">
+                                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
+                                    {isLoading ? (
+                                        <div className="flex gap-1.5 h-4 items-center">
+                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" />
+                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-150" />
+                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce delay-300" />
+                                        </div>
+                                    ) : (
+                                        <Pause className="w-4 h-4 text-amber-500" />
+                                    )}
+                                    <span className="font-medium">
+                                        {isPaused ? 'Busca pausada' : `Processando: "${selectedCategories[currentCategoryIndex]}"`}
+                                    </span>
+                                </div>
+                                <div className="font-mono text-xs flex gap-4">
+                                    <span>{currentCategoryIndex + 1} de {selectedCategories.length} categorias</span>
+                                    <span className="text-blue-600 dark:text-blue-400 font-bold">{accumulatedResults.length} leads únicos</span>
+                                </div>
+                            </div>
+                            <div className="h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                <div 
+                                    className={`h-full transition-all duration-700 ease-out rounded-full ${isPaused ? 'bg-amber-400' : 'bg-gradient-to-r from-blue-500 to-indigo-600 shadow-[0_0_12px_rgba(59,130,246,0.5)]'}`}
+                                    style={{ width: `${progress}%` }}
+                                />
+                            </div>
+                        </div>
                     )}
-                </button>
-            </div>
-            
-            {/* Warning Info */}
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex gap-3 items-start">
-                <div className="p-1 px-2 bg-amber-500/20 rounded-lg text-amber-500 font-bold text-xs">!</div>
-                <div className="space-y-1">
-                    <p className="text-xs font-semibold text-amber-400">Aviso de Créditos</p>
-                    <p className="text-[11px] text-slate-400">
-                        Cada categoria selecionada ({selectedCategories.length}) realizará uma busca independente. 
-                        Isso consumirá créditos da API proporcionalmente ao número de categorias.
-                    </p>
                 </div>
+            </div>
+
+            {/* Category Grid Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {CATEGORY_GROUPS.map(group => {
+                    const isExpanded = expandedGroups.includes(group.id)
+                    const groupSelectedCount = group.categories.filter(cat => selectedCategories.includes(cat)).length
+                    const isAllSelected = groupSelectedCount === group.categories.length
+                    const isPartial = groupSelectedCount > 0 && !isAllSelected
+
+                    return (
+                        <div key={group.id} className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/5 group/card">
+                            <div className="p-4 border-b border-slate-200/40 dark:border-slate-700/40 bg-slate-50/50 dark:bg-slate-900/20 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => toggleGroup(group)}
+                                        className={`p-1.5 rounded-lg transition-all ${
+                                            isAllSelected ? 'bg-indigo-600 text-white' : 
+                                            isPartial ? 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40' : 
+                                            'bg-slate-200 dark:bg-slate-700 text-slate-400'
+                                        }`}
+                                    >
+                                        {isAllSelected ? <CheckSquare className="w-4 h-4" /> : 
+                                         isPartial ? <Square className="w-4 h-4 opacity-50" /> :
+                                         <Square className="w-4 h-4" />}
+                                    </button>
+                                    <h3 className="font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                                        {group.label}
+                                        {groupSelectedCount > 0 && (
+                                            <span className="ml-2 text-xs px-2 py-0.5 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-full font-medium">
+                                                {groupSelectedCount}
+                                            </span>
+                                        )}
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={() => setExpandedGroups(prev => 
+                                        prev.includes(group.id) ? prev.filter(id => id !== group.id) : [...prev, group.id]
+                                    )}
+                                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                >
+                                    {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                </button>
+                            </div>
+                            
+                            {isExpanded && (
+                                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in duration-300">
+                                    {group.categories.map(cat => {
+                                        const isSelected = selectedCategories.includes(cat)
+                                        return (
+                                            <button
+                                                key={cat}
+                                                onClick={() => toggleCategory(cat)}
+                                                className={`flex items-center gap-2 p-2 rounded-xl text-xs sm:text-sm transition-all duration-200 text-left border ${
+                                                    isSelected 
+                                                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-medium' 
+                                                    : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900/40'
+                                                }`}
+                                            >
+                                                <div className={`w-4 h-4 rounded border transition-colors flex items-center justify-center ${
+                                                    isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 dark:border-slate-600'
+                                                }`}>
+                                                    {isSelected && <Check className="w-3 h-3" />}
+                                                </div>
+                                                <span className="truncate">{cat}</span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )
+                })}
             </div>
         </div>
     )
