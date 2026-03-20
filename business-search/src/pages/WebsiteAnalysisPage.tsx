@@ -1,777 +1,677 @@
-import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
-import axios from 'axios'
-import {
-    Search, MapPin, Play, X, ExternalLink, Star, ShieldCheck, ShieldAlert,
-    ShieldOff, ShieldX, CheckCircle2, AlertTriangle, XCircle, Globe,
-    SlidersHorizontal, Download, RefreshCw, Mail, ChevronUp, ChevronDown,
-    Eye, Maximize2, MoreVertical, Wifi, WifiOff, Loader2, MonitorSmartphone,
-    Image as ImageIcon, Clock, Activity, BarChart3, Filter, Zap
-} from 'lucide-react'
-import {
-    mockWebsiteAnalysis, getAnalysisSummary,
-    type SiteAnalysis, type SiteStatus
-} from '../lib/websiteAnalysisData'
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  Search, 
+  Filter, 
+  Download, 
+  ExternalLink, 
+  CheckCircle2, 
+  AlertCircle, 
+  XCircle, 
+  Clock, 
+  FileText,
+  ChevronRight,
+  RefreshCw,
+  Globe,
+  Smartphone,
+  Shield,
+  Trash2,
+  MoreVertical,
+  History,
+  CheckSquare,
+  Square,
+  Play,
+  MapPin
+} from 'lucide-react';
+import { 
+  SiteAnalysis, 
+  SiteStatus, 
+  getAnalysisSummary, 
+  saveAnalysisResults, 
+  loadAnalysisResults,
+  clearAnalysisResults,
+  saveToHistory,
+  loadHistory,
+  clearHistory
+} from '../lib/websiteAnalysisData';
+import axios from 'axios';
 
-/* ─── Types ────────────────────────── */
-type SortKey = 'status' | 'responseTime' | 'quality' | 'name'
-type SortDir = 'asc' | 'desc'
+// --- Types ---
 
-interface Filters {
-    statusFilter: SiteStatus[]
-    maxResponseTime: number
-    hasSSL: boolean | null
-    mobileOnly: boolean | null
-    search: string
+export interface AnalysisHistoryEntry {
+  id: string;
+  date: string;
+  location: string;
+  categories: string;
+  totalCount: number;
+  sites: SiteAnalysis[];
+  summary: {
+    ok: number;
+    warning: number;
+    error: number;
+    ssl_issue: number;
+    generic: number;
+  };
 }
 
-/* ─── Helpers ──────────────────────── */
-function statusConfig(status: SiteStatus) {
-    switch (status) {
-        case 'ok': return { label: 'OK', icon: <CheckCircle2 size={12} />, cls: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' }
-        case 'warning': return { label: 'Aviso', icon: <AlertTriangle size={12} />, cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30' }
-        case 'error': return { label: 'Erro', icon: <XCircle size={12} />, cls: 'bg-red-500/15 text-red-400 border-red-500/30' }
-        case 'ssl_issue': return { label: 'SSL', icon: <ShieldAlert size={12} />, cls: 'bg-orange-500/15 text-orange-400 border-orange-500/30' }
-    }
-}
+// --- Components ---
 
-function responseTimeConfig(ms: number | null) {
-    if (ms === null) return { label: 'Timeout', cls: 'text-red-400' }
-    if (ms < 1000) return { label: `${ms}ms`, cls: 'text-emerald-400' }
-    if (ms < 3000) return { label: `${(ms / 1000).toFixed(1)}s`, cls: 'text-amber-400' }
-    return { label: `${(ms / 1000).toFixed(1)}s`, cls: 'text-red-400' }
-}
+const statusConfig = (status: SiteStatus) => {
+  switch (status) {
+    case 'ok':
+      return { 
+        icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />, 
+        label: 'Bom', 
+        classes: 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+      };
+    case 'warning':
+      return { 
+        icon: <AlertCircle className="w-4 h-4 text-amber-500" />, 
+        label: 'Atenção', 
+        classes: 'bg-amber-50 text-amber-700 border-amber-100' 
+      };
+    case 'error':
+      return { 
+        icon: <XCircle className="w-4 h-4 text-rose-500" />, 
+        label: 'Erro', 
+        classes: 'bg-rose-50 text-rose-700 border-rose-100' 
+      };
+    case 'ssl_issue':
+      return { 
+        icon: <Shield className="w-4 h-4 text-blue-500" />, 
+        label: 'SSL', 
+        classes: 'bg-blue-50 text-blue-700 border-blue-100' 
+      };
+    case 'generic':
+      return { 
+        icon: <Globe className="w-4 h-4 text-purple-500" />, 
+        label: 'Genérico', 
+        classes: 'bg-purple-50 text-purple-700 border-purple-100' 
+      };
+    default:
+      return { 
+        icon: <Clock className="w-4 h-4 text-gray-500" />, 
+        label: 'Pendente', 
+        classes: 'bg-gray-50 text-gray-700 border-gray-100' 
+      };
+  }
+};
 
-function sslConfig(ssl: SiteAnalysis['ssl']) {
-    switch (ssl) {
-        case 'valid': return { icon: <ShieldCheck size={13} className="text-emerald-400" />, label: 'SSL válido' }
-        case 'expired': return { icon: <ShieldX size={13} className="text-red-400" />, label: 'SSL expirado' }
-        case 'warning': return { icon: <ShieldAlert size={13} className="text-amber-400" />, label: 'SSL aviso' }
-        case 'missing': return { icon: <ShieldOff size={13} className="text-slate-500" />, label: 'Sem SSL' }
-    }
-}
+const SiteAnalysisCard = ({ analysis, isSelected, onToggleSelect }: { 
+  analysis: SiteAnalysis; 
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
+}) => {
+  const config = statusConfig(analysis.status);
+  
+  return (
+    <div className={`group relative bg-white rounded-xl border transition-all duration-300 hover:shadow-lg overflow-hidden ${isSelected ? 'border-primary-500 ring-1 ring-primary-500' : 'border-gray-100'}`}>
+      {/* Checkbox Overlay */}
+      <button 
+        onClick={() => onToggleSelect(analysis.id)}
+        className="absolute top-3 left-3 z-10 p-1 rounded-md bg-white/80 backdrop-blur-sm border border-gray-200 shadow-sm transition-transform active:scale-95 group-hover:scale-110"
+      >
+        {isSelected ? (
+          <CheckSquare className="w-4 h-4 text-primary-600" />
+        ) : (
+          <Square className="w-4 h-4 text-gray-400" />
+        )}
+      </button>
 
-function qualityColor(score: number) {
-    if (score >= 80) return 'text-emerald-400'
-    if (score >= 55) return 'text-amber-400'
-    return 'text-red-400'
-}
-
-function qualityBarColor(score: number) {
-    if (score >= 80) return 'bg-emerald-500'
-    if (score >= 55) return 'bg-amber-500'
-    return 'bg-red-500'
-}
-
-function Stars({ rating }: { rating: number }) {
-    return (
-        <div className="flex items-center gap-0.5">
-            {[1, 2, 3, 4, 5].map(i => (
-                <Star key={i} size={11} className={i <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-slate-700 fill-slate-700'} />
-            ))}
-            <span className="text-[11px] text-slate-500 ml-1">{rating.toFixed(1)}</span>
+      {/* Screenshot / Placeholder */}
+      <div className="aspect-video w-full bg-gray-50 relative overflow-hidden">
+        {analysis.screenshotUrl ? (
+          <img 
+            src={analysis.screenshotUrl} 
+            alt={analysis.businessName} 
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 space-y-2">
+            <Globe className="w-8 h-8 opacity-20" />
+            <span className="text-xs font-medium opacity-50">Sem preview disponível</span>
+          </div>
+        )}
+        
+        {/* Status Badge */}
+        <div className={`absolute bottom-3 right-3 px-2 py-1 rounded-lg border backdrop-blur-md shadow-sm flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${config.classes}`}>
+          {config.icon}
+          {config.label}
         </div>
-    )
-}
+      </div>
 
-/* ─── Screenshot Image with lazy + skeleton ─── */
-function ScreenshotImage({ src, alt, onClick }: { src: string | null; alt: string; onClick: () => void }) {
-    const [loaded, setLoaded] = useState(false)
-    const [errored, setErrored] = useState(false)
-
-    if (!src || errored) {
-        return (
-            <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-slate-900/50">
-                <ImageIcon size={28} className="text-slate-700" />
-                <span className="text-[11px] text-slate-600">{src ? 'Erro ao carregar' : 'Screenshot indisponível'}</span>
-            </div>
-        )
-    }
-
-    return (
-        <div className="relative w-full h-full cursor-zoom-in group" onClick={onClick}>
-            {!loaded && (
-                <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-800 to-slate-900" />
-            )}
-            <img
-                src={src}
-                alt={alt}
-                loading="lazy"
-                onLoad={() => setLoaded(true)}
-                onError={() => setErrored(true)}
-                className={`w-full h-full object-cover object-top transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                <div className="bg-black/60 rounded-full p-2">
-                    <Maximize2 size={16} className="text-white" />
-                </div>
-            </div>
+      {/* Info */}
+      <div className="p-4 space-y-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="font-semibold text-gray-900 line-clamp-1 group-hover:text-primary-600 transition-colors">
+              {analysis.businessName}
+            </h3>
+            <a 
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${analysis.businessName}, ${analysis.id}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              title="Abrir no Google Maps"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MapPin className="w-3.5 h-3.5 text-rose-500" />
+            </a>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <ExternalLink className="w-3 h-3 flex-shrink-0" />
+            <a 
+              href={analysis.website} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="truncate hover:text-primary-600 transition-colors"
+            >
+              {analysis.website.replace(/^https?:\/\//, '')}
+            </a>
+          </div>
         </div>
-    )
-}
 
-/* ─── Screenshot Modal ─────────────────── */
-function ScreenshotModal({ site, onClose }: { site: SiteAnalysis; onClose: () => void }) {
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
-            <div className="relative max-w-4xl w-full bg-slate-900 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl" onClick={e => e.stopPropagation()}>
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-                    <div className="flex items-center gap-2">
-                        <Globe size={14} className="text-slate-400" />
-                        <span className="text-sm font-medium text-white">{site.businessName}</span>
-                        <a href={site.website} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
-                            {site.website} <ExternalLink size={11} />
-                        </a>
-                    </div>
-                    <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors">
-                        <X size={18} />
-                    </button>
-                </div>
-                {/* Screenshot */}
-                <div className="relative aspect-video bg-slate-950">
-                    {site.screenshotUrl ? (
-                        <img src={site.screenshotUrl} alt={site.businessName} className="w-full h-full object-contain" />
-                    ) : (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-slate-600">
-                            <ImageIcon size={48} />
-                            <p className="text-sm">{site.screenshotError ?? 'Screenshot indisponível'}</p>
-                        </div>
-                    )}
-                </div>
-                {/* Footer bar */}
-                <div className="px-4 py-3 flex items-center gap-4 border-t border-slate-700 text-xs text-slate-500">
-                    <span className="flex items-center gap-1"><Clock size={11} /> {new Date(site.screenshotTimestamp).toLocaleString('pt-BR')}</span>
-                    {site.responseTime && <span className={`flex items-center gap-1 ${responseTimeConfig(site.responseTime).cls}`}><Zap size={11} /> {responseTimeConfig(site.responseTime).label}</span>}
-                    <span className="flex items-center gap-1">{sslConfig(site.ssl).icon} {sslConfig(site.ssl).label}</span>
-                </div>
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-2 rounded-lg bg-gray-50 border border-gray-100">
+            <div className="flex items-center gap-1.5 text-gray-500 mb-1">
+              <Clock className="w-3 h-3" />
+              <span className="text-[10px] uppercase font-bold tracking-tight">Velocidade</span>
             </div>
+            <div className={`text-sm font-bold ${analysis.responseTime && analysis.responseTime > 3000 ? 'text-amber-600' : 'text-emerald-600'}`}>
+              {analysis.responseTime ? `${analysis.responseTime}ms` : '---'}
+            </div>
+          </div>
+          <div className="p-2 rounded-lg bg-gray-50 border border-gray-100">
+            <div className="flex items-center gap-1.5 text-gray-500 mb-1">
+              <Shield className="w-3 h-3" />
+              <span className="text-[10px] uppercase font-bold tracking-tight">Segurança</span>
+            </div>
+            <div className={`text-sm font-bold ${analysis.ssl === 'valid' ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {analysis.ssl === 'valid' ? 'SSL Válido' : analysis.ssl === 'invalid' ? 'Erro SSL' : 'Inseguro'}
+            </div>
+          </div>
         </div>
-    )
-}
 
-/* ─── Single Analysis Card ─────────────── */
-function SiteAnalysisCard({ site, onSelect, onExpand }: {
-    site: SiteAnalysis
-    onSelect: (id: string) => void
-    onExpand: (site: SiteAnalysis) => void
-}) {
-    const st = statusConfig(site.status)
-    const rt = responseTimeConfig(site.responseTime)
-    const ssl = sslConfig(site.ssl)
-    const hasQuality = site.quality.aestheticScore > 0
-
-    return (
-        <div className={`glass rounded-2xl overflow-hidden flex flex-col group transition-all duration-200 hover:border-slate-600 hover:shadow-lg hover:shadow-black/20 border ${site.selected ? 'border-indigo-500/50 ring-1 ring-indigo-500/20' : 'border-slate-700/50'}`}>
-            {/* Screenshot */}
-            <div className="relative h-44 bg-slate-900 flex-shrink-0 overflow-hidden">
-                <ScreenshotImage src={site.screenshotUrl} alt={site.businessName} onClick={() => onExpand(site)} />
-
-                {/* Status badge top-left */}
-                <div className={`absolute top-2.5 left-2.5 flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border backdrop-blur-sm ${st.cls}`}>
-                    {st.icon} {st.label}
-                </div>
-
-                {/* HTTP code top-right */}
-                {site.statusCode && (
-                    <div className="absolute top-2.5 right-2.5 text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-slate-300">
-                        {site.statusCode}
-                    </div>
-                )}
-
-                {/* Checkbox bottom-left */}
-                <div className="absolute bottom-2.5 left-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                        onClick={() => onSelect(site.id)}
-                        className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${site.selected ? 'bg-indigo-600 border-indigo-500' : 'bg-black/60 border-slate-500'}`}
-                    >
-                        {site.selected && <CheckCircle2 size={12} className="text-white" />}
-                    </button>
-                </div>
-
-                {/* Timestamp */}
-                <div className="absolute bottom-2.5 right-2.5 text-[9px] text-slate-500 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded">
-                    {new Date(site.screenshotTimestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                </div>
-            </div>
-
-            {/* Body */}
-            <div className="p-4 flex flex-col gap-3 flex-1">
-                {/* Business name + URL */}
-                <div>
-                    <h3 className="text-sm font-semibold text-white leading-snug truncate">{site.businessName}</h3>
-                    <a href={site.website} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 mt-0.5 truncate">
-                        <Globe size={10} className="shrink-0" />
-                        <span className="truncate">{site.website.replace(/^https?:\/\//, '')}</span>
-                        <ExternalLink size={9} className="shrink-0" />
-                    </a>
-                    <div className="mt-1.5 flex items-center gap-2 justify-between">
-                        <Stars rating={site.rating} />
-                        <span className="text-[10px] text-slate-600">{site.ratingCount} avaliações</span>
-                    </div>
-                </div>
-
-                {/* Metrics row */}
-                <div className="grid grid-cols-3 gap-2">
-                    {/* Response time */}
-                    <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                        <Zap size={11} className={`mx-auto mb-0.5 ${rt.cls}`} />
-                        <p className={`text-[11px] font-bold ${rt.cls}`}>{rt.label}</p>
-                        <p className="text-[9px] text-slate-600">Resposta</p>
-                    </div>
-                    {/* SSL */}
-                    <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                        {ssl.icon && <div className="flex justify-center mb-0.5">{ssl.icon}</div>}
-                        <p className="text-[11px] font-bold text-slate-300">
-                            {site.ssl === 'valid' ? 'Válido' : site.ssl === 'expired' ? 'Expirado' : site.ssl === 'missing' ? 'Ausente' : 'Aviso'}
-                        </p>
-                        <p className="text-[9px] text-slate-600">SSL</p>
-                    </div>
-                    {/* Redirects */}
-                    <div className="bg-slate-800/50 rounded-lg p-2 text-center">
-                        <Activity size={11} className={`mx-auto mb-0.5 ${site.redirectCount > 0 ? 'text-amber-400' : 'text-slate-500'}`} />
-                        <p className={`text-[11px] font-bold ${site.redirectCount > 0 ? 'text-amber-400' : 'text-slate-400'}`}>{site.redirectCount}</p>
-                        <p className="text-[9px] text-slate-600">Redirecionamentos</p>
-                    </div>
-                </div>
-
-                {/* Quality score */}
-                {hasQuality ? (
-                    <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[11px] text-slate-400 font-medium">Qualidade Visual</span>
-                            <span className={`text-[13px] font-bold ${qualityColor(site.quality.aestheticScore)}`}>
-                                {site.quality.aestheticScore}/100
-                            </span>
-                        </div>
-                        {/* Progress bar */}
-                        <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                            <div
-                                className={`h-full rounded-full transition-all duration-700 ${qualityBarColor(site.quality.aestheticScore)}`}
-                                style={{ width: `${site.quality.aestheticScore}%` }}
-                            />
-                        </div>
-                        {/* Sub-scores */}
-                        <div className="mt-2 flex items-center gap-2 flex-wrap">
-                            <span className={`text-[10px] flex items-center gap-1 ${site.quality.mobileScore >= 70 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                <MonitorSmartphone size={10} />
-                                Mobile {site.quality.mobileScore >= 70 ? 'OK' : 'Ruim'}
-                            </span>
-                            {site.quality.brokenImages > 0 && (
-                                <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                                    <ImageIcon size={10} /> {site.quality.brokenImages} imgs quebradas
-                                </span>
-                            )}
-                            {!site.quality.hasMetaDescription && (
-                                <span className="text-[10px] text-slate-600 flex items-center gap-1">sem meta</span>
-                            )}
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-800/40 rounded-xl p-2.5">
-                        <AlertTriangle size={13} className="text-red-400/70" />
-                        {site.screenshotError ?? 'Site inacessível — análise de qualidade indisponível'}
-                    </div>
-                )}
-
-                {/* Ver Detalhes */}
-                <button
-                    onClick={() => onExpand(site)}
-                    className="mt-auto w-full flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-xl border border-slate-700 text-slate-400 hover:text-white hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-all"
-                >
-                    <Eye size={13} /> Ver Detalhes
-                </button>
-            </div>
-        </div>
-    )
-}
-
-/* ─── Filter Sidebar ───────────────── */
-function FilterSidebar({
-    filters, onChange, onReset, counts
-}: {
-    filters: Filters
-    onChange: (f: Partial<Filters>) => void
-    onReset: () => void
-    counts: Record<SiteStatus, number>
-}) {
-    const statuses: { key: SiteStatus; label: string; icon: React.ReactNode; count: number }[] = [
-        { key: 'ok', label: 'OK', icon: <CheckCircle2 size={13} className="text-emerald-400" />, count: counts.ok },
-        { key: 'warning', label: 'Aviso', icon: <AlertTriangle size={13} className="text-amber-400" />, count: counts.warning },
-        { key: 'error', label: 'Erro', icon: <XCircle size={13} className="text-red-400" />, count: counts.error },
-        { key: 'ssl_issue', label: 'SSL', icon: <ShieldAlert size={13} className="text-orange-400" />, count: counts.ssl_issue },
-    ]
-
-    return (
-        <aside className="w-60 shrink-0 flex flex-col gap-4">
-            {/* Status */}
-            <div className="glass rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5"><Filter size={12} /> Status</h3>
-                    {filters.statusFilter.length > 0 && (
-                        <button onClick={() => onChange({ statusFilter: [] })} className="text-[10px] text-slate-500 hover:text-slate-300">Limpar</button>
-                    )}
-                </div>
-                {statuses.map(({ key, label, icon, count }) => {
-                    const active = filters.statusFilter.includes(key)
-                    return (
-                        <button key={key} onClick={() => {
-                            const next = active
-                                ? filters.statusFilter.filter(s => s !== key)
-                                : [...filters.statusFilter, key]
-                            onChange({ statusFilter: next })
-                        }} className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-all mb-1 last:mb-0 ${active ? 'bg-indigo-600/20 text-white border border-indigo-500/30' : 'text-slate-400 hover:bg-slate-800/50'
-                            }`}>
-                            {icon}
-                            <span className="flex-1 text-left text-xs">{label}</span>
-                            <span className="text-[11px] bg-slate-800 px-1.5 py-0.5 rounded-full text-slate-500">{count}</span>
-                        </button>
-                    )
-                })}
-            </div>
-
-            {/* Response time */}
-            <div className="glass rounded-xl p-4">
-                <h3 className="text-xs font-semibold text-slate-300 mb-3 flex items-center gap-1.5"><Clock size={12} /> Tempo máx.</h3>
-                <div className="flex justify-between text-[11px] text-slate-500 mb-1">
-                    <span>0ms</span>
-                    <span className="text-indigo-400 font-medium">{filters.maxResponseTime >= 10000 ? 'Qualquer' : `${(filters.maxResponseTime / 1000).toFixed(0)}s`}</span>
-                    <span>∞</span>
-                </div>
-                <input type="range" min={1000} max={10000} step={500}
-                    value={filters.maxResponseTime}
-                    onChange={e => onChange({ maxResponseTime: Number(e.target.value) })}
-                    style={{ '--value': `${((filters.maxResponseTime - 1000) / 9000) * 100}%` } as React.CSSProperties}
-                    className="w-full"
-                />
-            </div>
-
-            {/* Toggles */}
-            <div className="glass rounded-xl p-4 flex flex-col gap-3">
-                <h3 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5"><SlidersHorizontal size={12} /> Filtros</h3>
-
-                {([
-                    { key: 'hasSSL', icon: <ShieldCheck size={13} />, label: 'Com SSL válido' },
-                    { key: 'mobileOnly', icon: <MonitorSmartphone size={13} />, label: 'Mobile friendly' },
-                ] as const).map(({ key, icon, label }) => {
-                    const val = filters[key]
-                    return (
-                        <button key={key} onClick={() => onChange({ [key]: val === true ? null : true })}
-                            className={`flex items-center gap-2 text-xs transition-colors ${val ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-300'}`}>
-                            <div className={`w-8 h-4 rounded-full transition-colors relative ${val ? 'bg-indigo-600' : 'bg-slate-700'}`}>
-                                <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${val ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                            </div>
-                            <span className="flex items-center gap-1">{icon} {label}</span>
-                        </button>
-                    )
-                })}
-            </div>
-
-            {/* Reset */}
-            <button onClick={onReset} className="text-xs text-slate-600 hover:text-slate-400 transition-colors py-1">
-                Limpar todos os filtros
-            </button>
-        </aside>
-    )
-}
-
-/* ─── Analysis Progress ─────────────── */
-function AnalysisProgress({ current, total, business }: { current: number; total: number; business: string }) {
-    const pct = Math.round((current / total) * 100)
-    return (
-        <div className="glass rounded-2xl p-5 border border-indigo-500/20">
-            <div className="flex items-center gap-3 mb-4">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                    <Loader2 size={18} className="text-indigo-400 animate-spin" />
-                </div>
-                <div>
-                    <p className="text-sm font-semibold text-white">Analisando sites...</p>
-                    <p className="text-xs text-slate-500">{current} de {total} sites concluídos</p>
-                </div>
-                <span className="ml-auto text-lg font-bold text-indigo-400">{pct}%</span>
-            </div>
-            {/* Progress bar */}
-            <div className="h-2 rounded-full bg-slate-800 overflow-hidden mb-3">
-                <div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-cyan-500 transition-all duration-500"
-                    style={{ width: `${pct}%` }}
-                />
-            </div>
-            {/* Current business */}
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Globe size={12} className="text-indigo-400 animate-pulse" />
-                <span>Analisando: <span className="text-slate-300">{business}</span></span>
-            </div>
-        </div>
-    )
-}
-
-/* ─── Bulk Actions Bar ──────────────── */
-function BulkActionsBar({ selected, onReanalyze, onExport, onEmail, onClearSelection }: {
-    selected: number
-    onReanalyze: () => void
-    onExport: () => void
-    onEmail: () => void
-    onClearSelection: () => void
-}) {
-    if (selected === 0) return null
-    return (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-slate-800 border border-slate-600 rounded-2xl px-5 py-3 shadow-2xl shadow-black/40 backdrop-blur">
-            <span className="text-sm font-semibold text-white">{selected} site{selected > 1 ? 's' : ''} selecionado{selected > 1 ? 's' : ''}</span>
-            <div className="w-px h-4 bg-slate-700" />
-            <button onClick={onReanalyze} className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-                <RefreshCw size={13} /> Re-analisar
-            </button>
-            <button onClick={onExport} className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-                <Download size={13} /> Exportar
-            </button>
-            <button onClick={onEmail} className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-700 transition-colors">
-                <Mail size={13} /> Enviar relatório
-            </button>
-            <button onClick={onClearSelection} className="text-slate-600 hover:text-slate-400 ml-1">
-                <X size={16} />
-            </button>
-        </div>
-    )
-}
-
-/* ─── Empty State ───────────────────── */
-function EmptyIllustration() {
-    return (
-        <svg width="120" height="100" viewBox="0 0 120 100" fill="none">
-            <rect x="10" y="20" width="100" height="70" rx="8" fill="#1e293b" stroke="#334155" strokeWidth="1.5" />
-            <rect x="10" y="20" width="100" height="18" rx="8" fill="#1e293b" stroke="#334155" strokeWidth="1.5" />
-            <circle cx="24" cy="29" r="4" fill="#ef4444" fillOpacity="0.5" />
-            <circle cx="38" cy="29" r="4" fill="#f59e0b" fillOpacity="0.5" />
-            <circle cx="52" cy="29" r="4" fill="#10b981" fillOpacity="0.5" />
-            <rect x="22" y="50" width="76" height="6" rx="3" fill="#1e3a5f" />
-            <rect x="22" y="63" width="50" height="6" rx="3" fill="#172554" />
-            <circle cx="88" cy="72" r="16" fill="#1e293b" stroke="#334155" />
-            <path d="M82 72l4 4 8-8" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    )
-}
-
-/* ─── KPI Summary Bar ───────────────── */
-function SummaryBar({ data }: { data: SiteAnalysis[] }) {
-    const s = getAnalysisSummary(data)
-    const items = [
-        { label: 'Total', value: s.total, cls: 'text-slate-300', icon: <Globe size={14} /> },
-        { label: 'OK', value: s.ok, cls: 'text-emerald-400', icon: <CheckCircle2 size={14} /> },
-        { label: 'Avisos', value: s.warning + s.sslIssue, cls: 'text-amber-400', icon: <AlertTriangle size={14} /> },
-        { label: 'Erros', value: s.error, cls: 'text-red-400', icon: <XCircle size={14} /> },
-        { label: 'Resposta Média', value: `${s.avgResponseTime}ms`, cls: 'text-cyan-400', icon: <Zap size={14} /> },
-        { label: 'Qualidade Média', value: `${s.avgQuality}`, cls: qualityColor(s.avgQuality), icon: <BarChart3 size={14} /> },
-    ]
-    return (
-        <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
-            {items.map(({ label, value, cls, icon }) => (
-                <div key={label} className="glass rounded-xl px-3 py-3 flex flex-col gap-1">
-                    <div className={`flex items-center gap-1 ${cls}`}>{icon}</div>
-                    <p className={`text-xl font-bold ${cls} leading-none`}>{value}</p>
-                    <p className="text-[10px] text-slate-600">{label}</p>
-                </div>
-            ))}
-        </div>
-    )
-}
-
-/* ─── Default filters ───────────────── */
-const DEFAULT_FILTERS: Filters = {
-    statusFilter: [],
-    maxResponseTime: 10000,
-    hasSSL: null,
-    mobileOnly: null,
-    search: '',
-}
-
-/* ══════════════════════════════════════
-   MAIN PAGE
-══════════════════════════════════════ */
-export default function WebsiteAnalysisPage() {
-    const [data, setData] = useState<SiteAnalysis[]>([])
-    const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
-    const [sortKey, setSortKey] = useState<SortKey>('status')
-    const [sortDir, setSortDir] = useState<SortDir>('asc')
-    const [isAnalyzing, setIsAnalyzing] = useState(false)
-    const [analyzeProgress, setAnalyzeProgress] = useState({ current: 0, total: 0, business: '' })
-    const [modalSite, setModalSite] = useState<SiteAnalysis | null>(null)
-    const [showSidebar, setShowSidebar] = useState(true)
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-    const hasStartedRef = useRef(false)
-
-    /* ─── Real analysis ─── */
-    const runAnalysis = useCallback(async (sites: { id: string, businessName: string, website: string }[]) => {
-        if (isAnalyzing || sites.length === 0) return
-        setIsAnalyzing(true)
-        setData([])
-
-        const results: SiteAnalysis[] = []
-
-        for (let i = 0; i < sites.length; i++) {
-            const site = sites[i]
-            setAnalyzeProgress({ current: i, total: sites.length, business: site.businessName })
-
-            try {
-                const response = await axios.post('http://localhost:3002/api/analyze/site', site)
-                const result: SiteAnalysis = {
-                    ...response.data,
-                    address: response.data.address || '',
-                    businessType: response.data.businessType || 'Lead',
-                    analyzedAt: response.data.analyzedAt || new Date().toISOString(),
-                    selected: false
-                }
-                results.push(result)
-                setData(prev => [...prev, result])
-            } catch (err) {
-                console.error('Analysis error:', err)
-                const fallback: SiteAnalysis = {
-                    id: site.id,
-                    businessName: site.businessName,
-                    website: site.website,
-                    address: '',
-                    businessType: 'Lead',
-                    status: 'error',
-                    statusCode: null,
-                    responseTime: null,
-                    ssl: 'missing',
-                    redirectCount: 0,
-                    screenshotUrl: null,
-                    screenshotTimestamp: new Date().toISOString(),
-                    quality: {
-                        aestheticScore: 0,
-                        layoutScore: 0,
-                        colorScore: 0,
-                        mobileScore: 0,
-                        brokenImages: 0,
-                        hasFavicon: false,
-                        hasMetaDescription: false
-                    },
-                    rating: 0,
-                    ratingCount: 0,
-                    selected: false,
-                    analyzedAt: new Date().toISOString(),
-                    screenshotError: 'Falha na conexão com o servidor de análise'
-                }
-                results.push(fallback)
-                setData(prev => [...prev, fallback])
-            }
-        }
-
-        setIsAnalyzing(false)
-        setAnalyzeProgress(prev => ({ ...prev, current: sites.length }))
-    }, [isAnalyzing])
-
-
-
-    /* ─── Check for pending analysis from LeadsPage ─── */
-    useEffect(() => {
-        if (hasStartedRef.current) return
-
-        const pending = sessionStorage.getItem('pending_analysis')
-        if (pending) {
-            hasStartedRef.current = true
-            sessionStorage.removeItem('pending_analysis') // Remove immediately to prevent multi-tabs/strict-mode from repeating
-            try {
-                const sites = JSON.parse(pending)
-                if (Array.isArray(sites) && sites.length > 0) {
-                    runAnalysis(sites)
-                }
-            } catch (e) {
-                console.error('Failed to parse pending analysis', e)
-            }
-        }
-    }, [runAnalysis])
-
-    /* ─── Toggle select ─── */
-    const toggleSelect = useCallback((id: string) => {
-        setData(prev => prev.map(d => d.id === id ? { ...d, selected: !d.selected } : d))
-    }, [])
-
-    const clearSelection = useCallback(() => {
-        setData(prev => prev.map(d => ({ ...d, selected: false })))
-    }, [])
-
-    /* ─── Filters ─── */
-    const updateFilter = useCallback((patch: Partial<Filters>) => {
-        setFilters(prev => ({ ...prev, ...patch }))
-    }, [])
-
-    /* ─── Derived data ─── */
-    const statusCounts: Record<SiteStatus, number> = useMemo(() => ({
-        ok: data.filter(d => d.status === 'ok').length,
-        warning: data.filter(d => d.status === 'warning').length,
-        error: data.filter(d => d.status === 'error').length,
-        ssl_issue: data.filter(d => d.status === 'ssl_issue').length,
-    }), [data])
-
-    const filtered = useMemo(() => {
-        let result = data
-        if (filters.statusFilter.length > 0) result = result.filter(d => filters.statusFilter.includes(d.status))
-        if (filters.maxResponseTime < 10000) result = result.filter(d => d.responseTime !== null && d.responseTime <= filters.maxResponseTime)
-        if (filters.hasSSL === true) result = result.filter(d => d.ssl === 'valid')
-        if (filters.mobileOnly === true) result = result.filter(d => d.quality.mobileScore >= 70)
-        if (filters.search.trim()) {
-            const q = filters.search.toLowerCase()
-            result = result.filter(d => d.businessName.toLowerCase().includes(q) || d.website.toLowerCase().includes(q))
-        }
-
-        // Sort
-        result = [...result].sort((a, b) => {
-            let cmp = 0
-            switch (sortKey) {
-                case 'status': {
-                    const order: Record<SiteStatus, number> = { ok: 0, warning: 1, ssl_issue: 2, error: 3 }
-                    cmp = order[a.status] - order[b.status]
-                    break
-                }
-                case 'responseTime': cmp = (a.responseTime ?? 99999) - (b.responseTime ?? 99999); break
-                case 'quality': cmp = b.quality.aestheticScore - a.quality.aestheticScore; break
-                case 'name': cmp = a.businessName.localeCompare(b.businessName); break
-            }
-            return sortDir === 'asc' ? cmp : -cmp
-        })
-        return result
-    }, [data, filters, sortKey, sortDir])
-
-    const selectedCount = data.filter(d => d.selected).length
-
-    const toggleSort = (key: SortKey) => {
-        if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-        else { setSortKey(key); setSortDir('asc') }
-    }
-
-    const SortBtn = ({ k, label }: { k: SortKey; label: string }) => (
-        <button onClick={() => toggleSort(k)}
-            className={`flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border transition-all ${sortKey === k ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-300' : 'border-slate-700 text-slate-500 hover:text-slate-300'}`}>
-            {label}
-            {sortKey === k && (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
+        {/* Action Button */}
+        <button className="w-full py-2 bg-gray-900 hover:bg-black text-white rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 group/btn">
+          Ver Relatório Detalhado
+          <ChevronRight className="w-3 h-3 transition-transform group-hover/btn:translate-x-1" />
         </button>
-    )
+      </div>
+    </div>
+  );
+};
 
-    return (
-        <div className="min-h-screen bg-[#0a0f1e]">
-            {/* Ambient BG */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/8 rounded-full blur-3xl" />
-                <div className="absolute top-1/2 -right-40 w-96 h-96 bg-cyan-600/6 rounded-full blur-3xl" />
+const SummaryBar = ({ summary }: { summary: ReturnType<typeof getAnalysisSummary> }) => (
+  <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+    {[
+      { label: 'Total Analisado', value: summary.total, icon: <FileText className="w-5 h-5 text-gray-400" />, color: 'gray' },
+      { label: 'Sites Bons', value: summary.ok, icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" />, color: 'emerald' },
+      { label: 'Atenção', value: summary.warning, icon: <AlertCircle className="w-5 h-5 text-amber-500" />, color: 'amber' },
+      { label: 'Em Erro', value: summary.error, icon: <XCircle className="w-5 h-5 text-rose-500" />, color: 'rose' },
+      { label: 'Inseguros', value: summary.ssl, icon: <Shield className="w-5 h-5 text-blue-500" />, color: 'blue' },
+      { label: 'Genéricos', value: summary.generic, icon: <Globe className="w-5 h-5 text-purple-500" />, color: 'purple' }
+    ].map((stat, i) => (
+      <div key={i} className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm transition-transform hover:-translate-y-1">
+        <div className="flex items-center justify-between mb-2">
+          {stat.icon}
+          <span className={`text-[10px] font-bold uppercase tracking-wider text-${stat.color}-500/70`}>Resultados</span>
+        </div>
+        <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
+        <div className="text-xs text-gray-500 font-medium">{stat.label}</div>
+      </div>
+    ))}
+  </div>
+);
+
+const FilterSidebar = ({ 
+  selectedStatus, 
+  setSelectedStatus,
+  history,
+  onLoadHistory,
+  onClearHistory
+}: { 
+  selectedStatus: string; 
+  setSelectedStatus: (s: string) => void;
+  history: AnalysisHistoryEntry[];
+  onLoadHistory: (entry: AnalysisHistoryEntry) => void;
+  onClearHistory: () => void;
+}) => (
+  <div className="w-full lg:w-72 space-y-6">
+    {/* Filtros */}
+    <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+      <div className="flex items-center gap-2 mb-6">
+        <Filter className="w-4 h-4 text-primary-600" />
+        <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Filtros Avançados</h2>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-3">
+            Status do Website
+          </label>
+          <div className="space-y-2">
+            {[
+              { id: 'all', label: 'Todos os Sites', color: 'gray' },
+              { id: 'ok', label: 'Performance Boa', color: 'emerald' },
+              { id: 'warning', label: 'Problemas Leves', color: 'amber' },
+              { id: 'error', label: 'Sites Fora do Ar', color: 'rose' },
+              { id: 'ssl_issue', label: 'Inseguros (SSL)', color: 'blue' },
+              { id: 'generic', label: 'Genéricos', color: 'purple' }
+            ].map(status => (
+              <button
+                key={status.id}
+                onClick={() => setSelectedStatus(status.id)}
+                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-between ${
+                  selectedStatus === status.id 
+                    ? `bg-${status.color}-50 text-${status.color}-700 border border-${status.color}-100 shadow-sm` 
+                    : 'text-gray-500 hover:bg-gray-50 border border-transparent'
+                }`}
+              >
+                {status.label}
+                {selectedStatus === status.id && <ChevronRight className="w-3 h-3" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Histórico Recente */}
+    <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4 text-primary-600" />
+          <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Histórico</h2>
+        </div>
+        {history.length > 0 && (
+          <button 
+            onClick={onClearHistory}
+            className="p-1.5 hover:bg-rose-50 text-gray-400 hover:text-rose-500 rounded-lg transition-colors"
+            title="Limpar Histórico"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {history.length === 0 ? (
+        <div className="text-center py-8">
+          <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+            <History className="w-6 h-6 text-gray-200" />
+          </div>
+          <p className="text-xs text-gray-400 font-medium px-4">Nenhuma análise anterior registrada</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {history.map((entry) => (
+            <button
+              key={entry.id}
+              onClick={() => onLoadHistory(entry)}
+              className="w-full text-left p-3 rounded-xl border border-gray-100 hover:border-primary-100 hover:bg-primary-50/30 transition-all group"
+            >
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] font-bold text-primary-600 uppercase">
+                  {new Date(entry.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} • {new Date(entry.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">
+                  {entry.totalCount} sites
+                </span>
+              </div>
+              <p className="text-xs font-semibold text-gray-800 line-clamp-1 mb-2 group-hover:text-primary-700">
+                {entry.location}
+              </p>
+              
+              {/* Mini Summary */}
+              <div className="flex gap-1.5">
+                {entry.summary.ok > 0 && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" title={`${entry.summary.ok} bons`} />}
+                {entry.summary.warning > 0 && <div className="w-1.5 h-1.5 rounded-full bg-amber-500" title={`${entry.summary.warning} avisos`} />}
+                {entry.summary.error > 0 && <div className="w-1.5 h-1.5 rounded-full bg-rose-500" title={`${entry.summary.error} erros`} />}
+                {entry.summary.ssl_issue > 0 && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" title={`${entry.summary.ssl_issue} SSL`} />}
+                {entry.summary.generic > 0 && <div className="w-1.5 h-1.5 rounded-full bg-purple-500" title={`${entry.summary.generic} genéricos`} />}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+export default function WebsiteAnalysisPage() {
+  const [results, setResults] = useState<SiteAnalysis[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentHistory, setCurrentHistory] = useState<AnalysisHistoryEntry[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  const hasStartedRef = useRef(false);
+
+  // Load results from storage and history on mount
+  useEffect(() => {
+    const saved = loadAnalysisResults();
+    if (saved.length > 0) {
+      setResults(saved);
+    }
+    setCurrentHistory(loadHistory());
+  }, []);
+
+  // Handle pending analysis from search page
+  const runAnalysis = async (sites: { id: string, businessName: string, website: string }[]) => {
+    if (sites.length === 0) return;
+    
+    setLoading(true);
+    // Initial UI state - pending
+    const initialResults = sites.map(site => ({
+      ...site,
+      status: 'pending' as SiteStatus
+    }));
+    setResults(initialResults);
+    saveAnalysisResults(initialResults);
+
+    try {
+      // Small delay to show initialization
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const batchResponse = await axios.post('http://localhost:3002/api/analyze/batch', {
+        sites: sites
+      });
+
+      const finalResults = batchResponse.data;
+      setResults(finalResults);
+      saveAnalysisResults(finalResults);
+      
+      // Save to history automatically after a bulk analysis
+      const location = sessionStorage.getItem('last_search_location') || 'Busca Local';
+      const categories = sessionStorage.getItem('last_search_categories') || 'Geral';
+      const updatedHistory = saveToHistory(finalResults, location, categories);
+      setCurrentHistory(updatedHistory);
+      
+    } catch (error) {
+      console.error('Batch analysis failed', error);
+      // In case of error, mark remaining pending as error
+      setResults(prev => prev.map(s => s.status === 'pending' ? { ...s, status: 'error' as SiteStatus } : s));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasStartedRef.current) return;
+
+    const pending = sessionStorage.getItem('pending_analysis');
+    if (pending) {
+        hasStartedRef.current = true;
+        sessionStorage.removeItem('pending_analysis');
+        try {
+            const sites = JSON.parse(pending);
+            if (Array.isArray(sites) && sites.length > 0) {
+                runAnalysis(sites);
+            }
+        } catch (e) {
+            console.error('Failed to parse pending analysis', e);
+        }
+    } else {
+        // Se não houver análise pendente, tenta carregar o último item do histórico
+        const history = loadHistory();
+        if (history.length > 0) {
+            const lastEntry = history[0];
+            setResults(lastEntry.sites);
+            saveAnalysisResults(lastEntry.sites);
+            hasStartedRef.current = true;
+        }
+    }
+}, []);
+
+  const clearResults = () => {
+    if (confirm('Tem certeza que deseja limpar todos os resultados?')) {
+      setResults([]);
+      setSelectedIds(new Set());
+      clearAnalysisResults();
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    // Here we would implement re-analysis of current sites
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setIsRefreshing(false);
+  };
+
+  const handleLoadFromHistory = (entry: AnalysisHistoryEntry) => {
+    setResults(entry.sites);
+    setSelectedStatus('all');
+    setSelectedIds(new Set());
+    saveAnalysisResults(entry.sites);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleClearHistory = () => {
+    if (confirm('Limpar histórico de análises permanentemente?')) {
+      clearHistory();
+      setCurrentHistory([]);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === filteredResults.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredResults.map(r => r.id)));
+    }
+  };
+
+  const reanalyzeErrors = async () => {
+    const errorSites = results.filter(s => s.status === 'error' || s.status === 'ssl_issue');
+    if (errorSites.length === 0) return;
+    
+    setLoading(true);
+    try {
+      const batchResponse = await axios.post('http://localhost:3002/api/analyze/batch', {
+        sites: errorSites.map(({ id, businessName, website }) => ({ id, businessName, website }))
+      });
+      
+      const newResults = results.map(s => {
+        const updated = batchResponse.data.find((ur: any) => ur.id === s.id);
+        return updated || s;
+      });
+      
+      setResults(newResults);
+      saveAnalysisResults(newResults);
+    } catch (error) {
+      console.error('Re-analysis failed', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statusCounts = useMemo(() => {
+    const counts = {
+      ok: results.filter(r => r.status === 'ok').length,
+      warning: results.filter(r => r.status === 'warning').length,
+      error: results.filter(r => r.status === 'error').length,
+      ssl_issue: results.filter(r => r.status === 'ssl_issue').length,
+      generic: results.filter(r => r.status === 'generic').length
+    };
+    return counts;
+  }, [results]);
+
+  const filteredResults = useMemo(() => {
+    let filtered = results;
+    
+    if (selectedStatus !== 'all') {
+      filtered = filtered.filter(r => r.status === selectedStatus);
+    }
+    
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(r => 
+        r.businessName.toLowerCase().includes(query) || 
+        r.website.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort: Errors first, then SSL problems, then Warnings, then Ok, then Generics
+    const statusOrder: Record<SiteStatus | 'pending', number> = {
+      'error': 0,
+      'ssl_issue': 1,
+      'warning': 2,
+      'ok': 3,
+      'generic': 4,
+      'pending': 5
+    };
+    
+    return [...filtered].sort((a, b) => 
+      (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99)
+    );
+  }, [results, selectedStatus, searchQuery]);
+
+  const summary = getAnalysisSummary(results);
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] pb-20">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-200">
+              <Globe className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Análise de Presença Digital</h1>
+              <p className="text-xs text-gray-500 font-medium">Auditoria técnica de performance e segurança</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Search Tool */}
+            <div className="relative group hidden md:block">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-primary-500 transition-colors" />
+              <input
+                type="text"
+                placeholder="Filtrar por nome ou URL..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm w-80 focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 outline-none transition-all"
+              />
             </div>
 
-            <div className="relative z-10 max-w-[1600px] mx-auto px-4 py-6">
-                {/* Header */}
-                <header className="mb-6">
-                    <div className="flex items-center gap-3 mb-1">
-                        <div className="w-9 h-9 rounded-xl bg-cyan-600/20 flex items-center justify-center border border-cyan-500/30">
-                            <Globe size={18} className="text-cyan-400" />
-                        </div>
-                        <h1 className="text-xl font-bold text-white">Análise de Sites</h1>
-                        <span className="text-[10px] font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full">BETA</span>
-                    </div>
-                    <p className="text-sm text-slate-500 ml-12">Analise qualidade, performance e segurança dos sites das empresas</p>
-                </header>
+            <div className="h-8 w-px bg-gray-100 mx-2 hidden md:block" />
 
-                {/* Actions & Filters */}
-                <div className="flex items-center gap-2 mb-6 justify-end">
-                    {/* Filter toggle on mobile */}
-                    <button onClick={() => setShowSidebar(v => !v)}
-                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white border border-slate-700 px-3 py-2 rounded-xl hover:bg-slate-800 transition-all">
-                        <Filter size={13} /> {showSidebar ? 'Ocultar' : 'Filtros'}
-                    </button>
-                    {/* Inline search filter */}
-                    {data.length > 0 && (
-                        <div className="relative">
-                            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                            <input
-                                type="text"
-                                value={filters.search}
-                                onChange={e => updateFilter({ search: e.target.value })}
-                                placeholder="Filtrar resultados..."
-                                className="bg-slate-800/60 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 w-44 transition-all"
-                            />
-                        </div>
-                    )}
+            <button 
+              onClick={handleRefresh}
+              disabled={loading || isRefreshing}
+              className="p-2.5 text-gray-500 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all disabled:opacity-50"
+              title="Atualizar Análise"
+            >
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            
+            <button 
+              onClick={clearResults}
+              className="p-2.5 text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+              title="Limpar Tudo"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+            
+            <button className="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-primary-200 flex items-center gap-2 transition-all active:scale-95">
+              <Download className="w-4 h-4" />
+              Exportar Leads
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-[1600px] mx-auto px-6 mt-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Sidebar */}
+          <FilterSidebar 
+            selectedStatus={selectedStatus} 
+            setSelectedStatus={setSelectedStatus}
+            history={currentHistory}
+            onLoadHistory={handleLoadFromHistory}
+            onClearHistory={handleClearHistory}
+          />
+
+          {/* Main Content */}
+          <div className="flex-1">
+            <SummaryBar summary={summary} />
+
+            {/* Toolbar Extra */}
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 py-4 px-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={selectAll}
+                    className="flex items-center gap-2 text-xs font-bold text-gray-600 hover:text-primary-600 transition-colors uppercase tracking-wider"
+                  >
+                    {selectedIds.size === filteredResults.length ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                    {selectedIds.size === filteredResults.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                  </button>
+                  {selectedIds.size > 0 && (
+                    <span className="text-xs font-bold text-primary-600 bg-primary-50 px-2.5 py-1 rounded-full">
+                      {selectedIds.size} selecionados
+                    </span>
+                  )}
                 </div>
 
-                {/* Progress */}
-                {isAnalyzing && (
-                    <div className="mb-6">
-                        <AnalysisProgress {...analyzeProgress} />
-                    </div>
-                )}
-
-                {/* Summary KPIs */}
-                {data.length > 0 && <SummaryBar data={data} />}
-
-                {/* Sort row */}
-                {data.length > 0 && (
-                    <div className="flex items-center gap-2 mb-5">
-                        <span className="text-xs text-slate-600">Ordenar:</span>
-                        <SortBtn k="status" label="Status" />
-                        <SortBtn k="responseTime" label="Tempo" />
-                        <SortBtn k="quality" label="Qualidade" />
-                        <SortBtn k="name" label="Nome" />
-                        <span className="ml-auto text-xs text-slate-600">{filtered.length} de {data.length} sites</span>
-                    </div>
-                )}
-
-                {/* Main content */}
-                {data.length === 0 && !isAnalyzing ? (
-                    /* No results */
-                    <div className="flex flex-col items-center justify-center py-20 text-center">
-                        <EmptyIllustration />
-                        <h2 className="text-lg font-semibold text-white mt-6 mb-2">Nenhum site pendente</h2>
-                        <p className="text-sm text-slate-500 max-w-xs mb-6">
-                            Para analisar um site, volte para a tela de busca, selecione as empresas desejadas e clique em <span className="text-cyan-400 font-medium">Analisar Sites</span>.
-                        </p>
-                    </div>
-                ) : (
-                    /* Cards + Sidebar */
-                    <div className="flex gap-5">
-                        {showSidebar && (
-                            <FilterSidebar
-                                filters={filters}
-                                onChange={updateFilter}
-                                onReset={() => setFilters(DEFAULT_FILTERS)}
-                                counts={statusCounts}
-                            />
-                        )}
-                        <div className="flex-1 min-w-0">
-                            {filtered.length === 0 ? (
-                                <div className="flex flex-col items-center py-20 text-slate-600">
-                                    <Filter size={32} className="mb-3 text-slate-700" />
-                                    <p className="text-sm">Nenhum site corresponde aos filtros</p>
-                                    <button onClick={() => setFilters(DEFAULT_FILTERS)} className="text-xs text-indigo-400 mt-2 hover:text-indigo-300">
-                                        Limpar filtros
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className={`grid gap-4 ${showSidebar ? 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'}`}>
-                                    {filtered.map(site => (
-                                        <SiteAnalysisCard
-                                            key={site.id}
-                                            site={site}
-                                            onSelect={toggleSelect}
-                                            onExpand={setModalSite}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )}
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={reanalyzeErrors}
+                    disabled={loading || results.filter(s => s.status === 'error' || s.status === 'ssl_issue').length === 0}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-tighter bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-50 transition-all border border-rose-100"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    Re-analisar Falhas
+                  </button>
+                </div>
             </div>
 
-            {/* Bulk actions */}
-            <BulkActionsBar
-                selected={selectedCount}
-                onReanalyze={() => { alert('Re-analisando selecionados...') }}
-                onExport={() => { alert('Exportando relatório...') }}
-                onEmail={() => { alert('Enviando relatório por email...') }}
-                onClearSelection={clearSelection}
-            />
-
-            {/* Screenshot Modal */}
-            {modalSite && <ScreenshotModal site={modalSite} onClose={() => setModalSite(null)} />}
+            {loading && results.every(r => r.status === 'pending') ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+                <div className="relative mb-6">
+                  <div className="w-20 h-20 border-4 border-primary-50 border-t-primary-600 rounded-full animate-spin" />
+                  <Globe className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-primary-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 mb-2">Iniciando Varredura Digital...</h2>
+                <p className="text-gray-500 text-sm max-w-sm text-center">
+                  Estamos rastreando os sites e capturando evidências visuais. Isso pode levar alguns segundos.
+                </p>
+              </div>
+            ) : filteredResults.length === 0 ? (
+              <div className="bg-white rounded-3xl border border-gray-100 p-20 text-center shadow-sm">
+                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Search className="w-8 h-8 text-gray-200" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">Nenhum resultado encontrado</h3>
+                <p className="text-gray-500 text-sm">Tente ajustar seus filtros ou realizar uma nova busca.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                {filteredResults.map((analysis) => (
+                  <SiteAnalysisCard 
+                    key={analysis.id} 
+                    analysis={analysis} 
+                    isSelected={selectedIds.has(analysis.id)}
+                    onToggleSelect={toggleSelect}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-    )
+      </div>
+    </div>
+  );
 }
