@@ -17,6 +17,7 @@ export interface SearchParams {
     requirePhone?: boolean
     page?: number
     perPage?: number
+    useFreeScraper?: boolean
 }
 
 export interface SearchHistoryItem {
@@ -48,10 +49,11 @@ export const searchService = {
     },
 
     /** Mass search multiple categories */
-    async massSearch(location: string, categories: string[]): Promise<SearchResultsResponse> {
+    async massSearch(location: string, categories: string[], useFreeScraper?: boolean): Promise<SearchResultsResponse> {
         const { data } = await api.post<SearchResultsResponse>('/mass-search', {
             location,
-            categories
+            categories,
+            useFreeScraper
         })
         return data
     },

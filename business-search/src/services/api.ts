@@ -29,7 +29,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3002/api
 
 export const api: AxiosInstance = axios.create({
     baseURL: BASE_URL,
-    timeout: 15_000,
+    timeout: 0, // No timeout to allow slow background scraping
     headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',

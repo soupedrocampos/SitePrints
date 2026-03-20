@@ -1,412 +1,271 @@
-import { useState, useMemo, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import {
-    Search, Plus, Download, Table2, LayoutGrid,
-    Columns, ChevronDown, Users, Star, TrendingUp, Code, Globe
+import React, { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { 
+    Users, Search, Download, Filter, 
+    BarChart3, RefreshCw, Send, Plus, 
+    Trash2, CheckCircle2, AlertCircle, X,
+    LayoutGrid, List as ListIcon, Database,
+    Info
 } from 'lucide-react'
-import { Lead, LeadFilters, LeadStatus, SortField, SortDir } from '../types/lead'
-import { exportToCSV } from '../lib/leadHelpers'
-import axios from 'axios'
-import LeadsSidebar from '../components/leads/LeadsSidebar'
-import LeadsTable from '../components/leads/LeadsTable'
-import LeadsCards from '../components/leads/LeadsCards'
-import BulkActionsBar from '../components/leads/BulkActionsBar'
-import LeadModal from '../components/leads/LeadModal'
-import LeadsEmptyState from '../components/leads/LeadsEmptyState'
-import { useLeads, useUpdateLead, useDeleteLead, useBulkUpdateStatus } from '../hooks/useLeads'
+import { leadsService } from '../services/leads'
+import { LeadsTable } from '../components/leads/LeadsTable'
+import { LeadsCards } from '../components/leads/LeadsCards'
+import { LeadsSidebar } from '../components/leads/LeadsSidebar'
+import type { Lead, LeadFilters } from '../types'
+import { LeadProgressBar } from '../components/leads/LeadProgressBar'
 
-const DEFAULT_FILTERS: LeadFilters = {
-    search: '', statuses: [], sources: [], dateFrom: '', dateTo: '',
-    enriched: null, qualityMin: 0, qualityMax: 100,
-    onlyWithWebsite: false,
-}
-
-const DEFAULT_COLS = new Set(['name', 'whatsapp', 'status', 'quality', 'city', 'created_at', 'actions'])
-
-const ALL_COL_LABELS: Record<string, string> = {
-    name: 'Empresa', whatsapp: 'WhatsApp', status: 'Status', quality: 'Score',
-    city: 'Cidade/UF', created_at: 'Criado em', actions: 'Ações',
-}
-
-export default function LeadsPage() {
-    const [page, setPage] = useState(1)
-    const [perPage, setPerPage] = useState(10)
-    const [filters, setFilters] = useState<LeadFilters>(DEFAULT_FILTERS)
-    const [sortField, setSortField] = useState<SortField>('created_at')
-    const [sortDir, setSortDir] = useState<SortDir>('desc')
-    const [isCheckingWhatsApp, setIsCheckingWhatsApp] = useState(false)
-    const navigate = useNavigate()
-
-    // Fetch leads from localStorage via hook
-    const { data: leadsData, isLoading } = useLeads({
-        page,
-        perPage,
-        search: filters.search,
-        status: filters.statuses,
-        source: filters.sources,
-        onlyWithWebsite: filters.onlyWithWebsite,
-        sortBy: sortField === 'quality' ? 'qualityScore' : sortField === 'created_at' ? 'createdAt' : 'companyName' as any,
-        sortDir
+export function LeadsPage() {
+    const [searchParams, setSearchParams] = useSearchParams()
+    const [leads, setLeads] = useState<Lead[]>([])
+    const [totalLeads, setTotalLeads] = useState(0)
+    const [isLoading, setIsLoading] = useState(true)
+    const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
+    const [selectedLeads, setSelectedLeads] = useState<string[]>([])
+    
+    // Stats
+    const [stats, setStats] = useState({
+        total: 0,
+        enriched: 0,
+        pending: 0,
+        websiteCount: 0
     })
 
-    const leads = leadsData?.data || []
-    const totalLeads = leadsData?.total || 0
+    // Active session filtering info from URL
+    const sessionIdFilter = searchParams.get('search')?.startsWith('mass-') || searchParams.get('search')?.startsWith('simple-')
+        ? searchParams.get('search') : null
 
-    const [viewMode, setViewMode] = useState<'table' | 'cards'>('table')
-    const [selected, setSelected] = useState<Set<string>>(new Set())
-    const [visibleCols, setVisibleCols] = useState<Set<string>>(DEFAULT_COLS)
-    const [showColDropdown, setShowColDropdown] = useState(false)
-    const [activeModal, setActiveModal] = useState<{ lead: Lead; mode: 'view' | 'edit' } | null>(null)
-    const [showExportOptions, setShowExportOptions] = useState(false)
+    const [filters, setFilters] = useState<LeadFilters>({
+        search: searchParams.get('search') || '',
+        statuses: [],
+        sources: [],
+        dateFrom: '',
+        dateTo: '',
+        enriched: null,
+        qualityMin: 0,
+        qualityMax: 100,
+        onlyWithWebsite: false,
+        sessionId: sessionIdFilter || undefined
+    })
 
-    // Mutations
-    const updateMutation = useUpdateLead()
-    const deleteMutation = useDeleteLead()
-    const bulkStatusMutation = useBulkUpdateStatus()
+    useEffect(() => {
+        fetchLeads()
+    }, [filters, searchParams])
 
-    const handleSort = (field: SortField) => {
-        if (field === sortField) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
-        else { setSortField(field); setSortDir('asc') }
-        setPage(1)
-    }
+    const fetchLeads = async () => {
+        setIsLoading(true)
+        try {
+            const currentSearch = searchParams.get('search') || ''
+            const updatedFilters = { ...filters, search: currentSearch }
+            
+            const response = await leadsService.getLeads(updatedFilters as any)
+            setLeads(response.data)
+            setTotalLeads(response.total)
 
-    const handleSelect = (id: string) => {
-        setSelected((prev) => {
-            const next = new Set(prev)
-            next.has(id) ? next.delete(id) : next.add(id)
-            return next
-        })
-    }
-
-    const handleSelectAll = (all: boolean) => {
-        const pageIds = leads.map((l) => l.id)
-        setSelected(all ? new Set(pageIds) : new Set())
-    }
-
-    const handleBulkStatus = async (status: LeadStatus) => {
-        await bulkStatusMutation.mutateAsync({ ids: Array.from(selected), status })
-        setSelected(new Set())
-    }
-
-    const handleBulkDelete = async () => {
-        for (const id of Array.from(selected)) {
-            await deleteMutation.mutateAsync(id)
+            // Update local stats from all leads (ideally should come from API)
+            const allLeads = await leadsService.getLeads({ perPage: 1000 } as any)
+            setStats({
+                total: allLeads.total,
+                enriched: allLeads.data.filter(l => l.enriched).length,
+                pending: allLeads.data.filter(l => !l.enriched).length,
+                websiteCount: allLeads.data.filter(l => l.website && l.website.trim() !== '').length
+            })
+        } catch (error) {
+            console.error('Fetch leads error:', error)
+        } finally {
+            setIsLoading(false)
         }
-        setSelected(new Set())
     }
 
-    const handleDelete = async (id: string) => {
-        await deleteMutation.mutateAsync(id)
-        setSelected((prev) => { const n = new Set(prev); n.delete(id); return n })
+    const clearSessionFilter = () => {
+        setSearchParams({})
+        setFilters(prev => ({ ...prev, search: '', sessionId: undefined }))
     }
 
-    const handleSave = async (updated: Lead) => {
-        await updateMutation.mutateAsync({ id: updated.id, payload: updated as any })
-        setActiveModal(null)
-    }
-
-    const handleAnalyzeBatch = useCallback(() => {
-        const selectedLeads = leads.filter(l => selected.has(l.id))
-        const analysisData = selectedLeads.map(l => ({
-            id: l.id,
-            businessName: l.name,
-            website: l.website || '',
-            rating: (l.quality || 0) / 20,
-            ratingCount: Math.floor(Math.random() * 100)
-        })).filter(l => !!l.website)
-
-        if (analysisData.length === 0) {
-            alert('Selecione leads que possuam website para analisar.')
-            return
+    const handleExport = async () => {
+        try {
+            const blob = await leadsService.exportCSV(filters as any)
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `leads_export_${new Date().toISOString().split('T')[0]}.csv`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+        } catch (error) {
+            console.error('Export error:', error)
         }
-
-        sessionStorage.setItem('pending_analysis', JSON.stringify(analysisData))
-        navigate('/analysis')
-    }, [leads, selected, navigate])
-
-    // Deduplication: keep the first encountered lead per unique name+phone combination
-    const handleDeduplicateAll = useCallback(() => {
-        const raw = localStorage.getItem('crm_leads')
-        if (!raw) return
-        const allLeads: Lead[] = JSON.parse(raw)
-        const seen = new Set<string>()
-        const deduped = allLeads.filter(lead => {
-            const key = `${lead.name.toLowerCase().trim()}|${(lead.phone || '').replace(/\D/g, '')}`
-            if (seen.has(key)) return false
-            seen.add(key)
-            return true
-        })
-        const removed = allLeads.length - deduped.length
-        localStorage.setItem('crm_leads', JSON.stringify(deduped))
-        setSelected(new Set())
-        // Force react-query to refetch by dispatching a storage event
-        window.dispatchEvent(new Event('storage'))
-        alert(`Duplicados removidos: ${removed} lead${removed !== 1 ? 's' : ''} eliminado${removed !== 1 ? 's' : ''}.`)
-    }, [])
-
-    // WhatsApp validation: calls backend to verify selected phone numbers
-    const handleCheckWhatsApp = useCallback(async () => {
-        if (isCheckingWhatsApp) return
-        const selectedLeads = leads.filter(l => selected.has(l.id) && l.phone)
-        if (selectedLeads.length === 0) {
-            alert('Selecione leads com telefone cadastrado para verificar WhatsApp.')
-            return
-        }
-        setIsCheckingWhatsApp(true)
-
-        // Mark selected leads as 'checking'
-        const raw = localStorage.getItem('crm_leads')
-        const allLeads: Lead[] = raw ? JSON.parse(raw) : []
-        const updatedChecking = allLeads.map(l =>
-            selected.has(l.id) && l.phone ? { ...l, whatsappStatus: 'checking' as const } : l
-        )
-        localStorage.setItem('crm_leads', JSON.stringify(updatedChecking))
-        window.dispatchEvent(new Event('storage'))
-
-        // Call backend for each lead
-        const results: Record<string, 'valid' | 'invalid'> = {}
-        for (const lead of selectedLeads) {
-            try {
-                const phone = lead.phone!.replace(/\D/g, '')
-                const res = await axios.post('http://localhost:3002/api/check-whatsapp', {
-                    phones: [phone]
-                })
-                const status = res.data?.results?.[phone]
-                results[lead.id] = status === 'valid' ? 'valid' : 'invalid'
-            } catch {
-                results[lead.id] = 'invalid'
-            }
-        }
-
-        // Persist results
-        const rawFinal = localStorage.getItem('crm_leads')
-        const allFinal: Lead[] = rawFinal ? JSON.parse(rawFinal) : []
-        const updated = allFinal.map(l => results[l.id] !== undefined ? { ...l, whatsappStatus: results[l.id] } : l)
-        localStorage.setItem('crm_leads', JSON.stringify(updated))
-        window.dispatchEvent(new Event('storage'))
-        setIsCheckingWhatsApp(false)
-    }, [leads, selected, isCheckingWhatsApp])
-
-    const clearFilters = useCallback(() => { setFilters(DEFAULT_FILTERS); setPage(1) }, [])
-
-    const toggleCol = (col: string) => {
-        setVisibleCols((prev) => {
-            const next = new Set(prev)
-            next.has(col) ? next.delete(col) : next.add(col)
-            return next
-        })
-    }
-
-    const handleExportJSON = () => {
-        const blob = new Blob([JSON.stringify(leadsData?.data || [], null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `leads_${Date.now()}.json`
-        a.click()
-        URL.revokeObjectURL(url)
-    }
-
-    const stats = {
-        total: totalLeads,
-        enriched: leads.filter((l) => l.enriched).length,
-        withoutWebsite: leads.filter((l) => !l.website || l.website.trim() === '').length,
-        avgQuality: Math.round(leads.reduce((s, l) => s + (l.quality || 0), 0) / (leads.length || 1)),
     }
 
     return (
-        <div className="min-h-screen bg-[#0a0f1e] pt-14">
-            {/* Ambient */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-0 left-1/4 w-96 h-96 bg-indigo-600/6 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-purple-600/6 rounded-full blur-3xl" />
-            </div>
+        <div className="flex flex-col xl:flex-row gap-8 min-h-screen">
+            {/* Sidebar Controls */}
+            <aside className="w-full xl:w-80 shrink-0">
+                <LeadsSidebar filters={filters} onFilterChange={setFilters} />
+            </aside>
 
-            <div className="relative z-10 max-w-[1400px] mx-auto px-4 py-6">
-                {/* Header */}
-                <header className="mb-6">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div>
-                            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                                <Users size={18} className="text-indigo-400" />
-                                Meus Leads
-                                <span className="text-sm font-normal text-slate-500 ml-1">({totalLeads})</span>
-                            </h1>
-                            <p className="text-sm text-slate-500 mt-0.5">Gerencie e qualifique seus contatos</p>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-wrap">
-                            {/* Search */}
-                            <div className="relative">
-                                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                                <input
-                                    type="text"
-                                    placeholder="Nome, CNPJ ou cidade..."
-                                    value={filters.search}
-                                    onChange={(e) => { setFilters({ ...filters, search: e.target.value }); setPage(1) }}
-                                    className="bg-slate-800/60 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/70 w-52"
-                                />
-                            </div>
-
-                            {/* View toggle */}
-                            <div className="flex border border-slate-700 rounded-xl overflow-hidden">
-                                <button onClick={() => setViewMode('table')}
-                                    className={`px-3 py-2 text-xs transition-colors ${viewMode === 'table' ? 'bg-indigo-600/20 text-indigo-300' : 'text-slate-500 hover:text-white'}`}>
-                                    <Table2 size={13} />
-                                </button>
-                                <button onClick={() => setViewMode('cards')}
-                                    className={`px-3 py-2 text-xs transition-colors ${viewMode === 'cards' ? 'bg-indigo-600/20 text-indigo-300' : 'text-slate-500 hover:text-white'}`}>
-                                    <LayoutGrid size={13} />
-                                </button>
-                            </div>
-
-                            {/* Column visibility */}
-                            {viewMode === 'table' && (
-                                <div className="relative">
-                                    <button onClick={() => setShowColDropdown(!showColDropdown)}
-                                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-400 hover:text-white transition-colors">
-                                        <Columns size={12} />
-                                        Colunas
-                                        <ChevronDown size={10} />
-                                    </button>
-                                    {showColDropdown && (
-                                        <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-xl p-2 z-20 shadow-xl min-w-36">
-                                            {Object.entries(ALL_COL_LABELS).map(([id, label]) => (
-                                                <label key={id} className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-slate-700/40 rounded-lg">
-                                                    <input type="checkbox" checked={visibleCols.has(id)} onChange={() => toggleCol(id)}
-                                                        className="accent-indigo-500 w-3 h-3" />
-                                                    <span className="text-xs text-slate-300">{label}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    )}
+            {/* Main Content Area */}
+            <main className="flex-1 space-y-8 min-w-0">
+                {/* Header Section */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-3xl p-8 shadow-xl shadow-slate-200/20 dark:shadow-none">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-blue-600/10 rounded-xl">
+                                    <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                                 </div>
-                            )}
-
-                            {/* Export */}
-                            <div className="relative">
-                                <button onClick={() => setShowExportOptions(!showExportOptions)}
-                                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-400 hover:text-white transition-colors">
-                                    <Download size={12} />
-                                    Exportar
-                                    <ChevronDown size={10} />
-                                </button>
-                                {showExportOptions && (
-                                    <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-xl p-1 z-20 shadow-xl min-w-32">
-                                        <button onClick={() => { exportToCSV(leads); setShowExportOptions(false) }}
-                                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 rounded-lg transition-colors">
-                                            <Download size={12} /> CSV
-                                        </button>
-                                        <button onClick={() => { handleExportJSON(); setShowExportOptions(false) }}
-                                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-300 hover:bg-slate-700/50 rounded-lg transition-colors">
-                                            <Code size={12} /> JSON
-                                        </button>
-                                    </div>
-                                )}
+                                <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Lead Center</h1>
                             </div>
-
-                            {/* New Lead */}
-                            <Link to="/leads/new"
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs text-white font-medium transition-all hover:shadow-lg hover:shadow-indigo-500/20">
-                                <Plus size={13} />
-                                Novo Lead Manual
-                            </Link>
+                            <p className="text-slate-500 font-medium">Gerencie e analise seu funil de prospecção</p>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-3">
+                            <button
+                                onClick={fetchLeads}
+                                className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-all border border-slate-200 dark:border-slate-700 active:scale-95"
+                                title="Atualizar dados"
+                            >
+                                <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                                onClick={handleExport}
+                                className="flex items-center gap-2.5 px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 rounded-2xl font-bold transition-all hover:border-indigo-500 hover:text-indigo-600 shadow-sm active:scale-95"
+                            >
+                                <Download className="w-4 h-4" />
+                                Exportar
+                            </button>
+                            <button className="flex items-center gap-2.5 px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-bold transition-all shadow-xl shadow-blue-500/20 hover:scale-[1.02] hover:shadow-2xl hover:shadow-blue-500/30 active:scale-95">
+                                <Send className="w-4 h-4" />
+                                CRM Interno
+                            </button>
                         </div>
                     </div>
 
-                    {/* Stats bar */}
-                    <div className="grid grid-cols-3 gap-3 mt-4">
+                    {/* Dashboard Mini-Stats */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mt-10">
                         {[
-                            { icon: <Users size={13} />, label: 'Total Leads', value: stats.total, color: 'text-indigo-400' },
-                            { icon: <Star size={13} />, label: 'Enriquecidos', value: stats.enriched, color: 'text-emerald-400' },
-                            { icon: <Globe size={13} />, label: 'Sem Website', value: stats.withoutWebsite, color: 'text-red-400' },
-                            { icon: <TrendingUp size={13} />, label: 'Score Médio', value: stats.avgQuality, color: 'text-yellow-400' },
-                        ].map(({ icon, label, value, color }) => (
-                            <div key={label} className="glass rounded-xl px-4 py-2.5 flex items-center gap-2">
-                                <span className={color}>{icon}</span>
-                                <div>
-                                    <p className="text-base font-bold text-white leading-none">{value}</p>
-                                    <p className="text-[10px] text-slate-500">{label}</p>
+                            { label: 'Total Base', value: stats.total, icon: Database, color: 'blue' },
+                            { label: 'Com Website', value: `${stats.websiteCount}`, icon: Globe, color: 'emerald' },
+                            { label: 'Analisados', value: stats.enriched, icon: CheckCircle2, color: 'indigo' },
+                            { label: 'Aguardando', value: stats.pending, icon: AlertCircle, color: 'amber' },
+                        ].map((stat, i) => (
+                            <div key={i} className="group p-5 bg-slate-50/50 dark:bg-slate-800/20 border border-slate-100 dark:border-slate-800 rounded-2xl transition-all hover:bg-white dark:hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-200/30 dark:hover:shadow-none">
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className={`p-2 bg-${stat.color}-500/10 rounded-lg group-hover:scale-110 transition-transform`}>
+                                        <stat.icon className={`w-5 h-5 text-${stat.color}-600 dark:text-${stat.color}-400`} />
+                                    </div>
+                                    <span className={`text-[10px] font-black uppercase tracking-widest text-${stat.color}-600/60`}>Live</span>
+                                </div>
+                                <div className="space-y-0.5">
+                                    <div className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{stat.value}</div>
+                                    <div className="text-xs font-bold text-slate-500 uppercase tracking-tight">{stat.label}</div>
                                 </div>
                             </div>
                         ))}
                     </div>
-                </header>
 
-                {/* Main layout */}
-                <div className="flex gap-4">
-                    {/* Sidebar 20% */}
-                    <div className="w-52 shrink-0">
-                        <LeadsSidebar leads={leads} filters={filters} onChange={(f) => { setFilters(f); setPage(1) }} />
+                    {/* Session Active Filter Banner */}
+                    {sessionIdFilter && (
+                        <div className="mt-8 bg-indigo-600 rounded-2xl p-4 flex items-center justify-between animate-in slide-in-from-top-4 duration-500 text-white shadow-xl shadow-indigo-600/20 border border-indigo-400/20">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-white/20 rounded-xl">
+                                    <Info className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-sm">Visualizando resultados de sessão específica</h4>
+                                    <p className="text-xs text-indigo-100 font-medium">Você está visualizando apenas os leads capturados na sessão <span className="font-mono bg-white/10 px-1 rounded">{sessionIdFilter}</span></p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={clearSessionFilter}
+                                className="flex items-center gap-2 px-4 py-2 bg-white text-indigo-600 rounded-xl font-bold text-sm hover:bg-slate-100 transition-all active:scale-95 shadow-lg"
+                            >
+                                <X className="w-4 h-4" />
+                                Limpar Filtro
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Main Leads List Container */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-3xl overflow-hidden shadow-2xl shadow-slate-200/10">
+                    {/* View Toolbar */}
+                    <div className="p-6 border-b border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                           <div className="hidden sm:flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-inner">
+                                <button
+                                    onClick={() => setViewMode('table')}
+                                    className={`p-2 rounded-lg transition-all ${viewMode === 'table' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    <ListIcon className="w-5 h-5" />
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('cards')}
+                                    className={`p-2 rounded-lg transition-all ${viewMode === 'cards' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    <LayoutGrid className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 ml-2">
+                                Listagem de Leads 
+                                <span className="ml-3 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-black uppercase tracking-wider">{totalLeads}</span>
+                            </h3>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            {selectedLeads.length > 0 && (
+                                <>
+                                    <button className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl font-bold text-sm hover:bg-indigo-100 transition-all">
+                                        Analisar em Massa ({selectedLeads.length})
+                                    </button>
+                                    <button className="p-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all">
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                </>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Content 80% */}
-                    <div className="flex-1 min-w-0 flex flex-col gap-3">
-                        {/* Bulk actions */}
-                        <BulkActionsBar
-                            count={selected.size}
-                            onChangeStatus={handleBulkStatus}
-                            onExport={() => exportToCSV(leads.filter((l) => selected.has(l.id)))}
-                            onDelete={handleBulkDelete}
-                            onClear={() => setSelected(new Set())}
-                            onAnalyze={handleAnalyzeBatch}
-                            onDeduplicateAll={handleDeduplicateAll}
-                            onCheckWhatsApp={handleCheckWhatsApp}
-                            isCheckingWhatsApp={isCheckingWhatsApp}
-                        />
-
-                        {/* Content */}
+                    {/* List Content */}
+                    <div className="min-h-[500px]">
                         {isLoading ? (
-                            <div className="flex-1 flex items-center justify-center py-20">
-                                <div className="w-8 h-8 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                                <div className="relative">
+                                    <div className="w-16 h-16 border-4 border-slate-200 dark:border-slate-800 rounded-full" />
+                                    <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin absolute inset-0" />
+                                </div>
+                                <span className="text-slate-500 font-bold uppercase tracking-widest text-[10px] animate-pulse">Carregando Leads...</span>
                             </div>
-                        ) : totalLeads === 0 ? (
-                            <LeadsEmptyState mode="no-leads" />
-                        ) : leads.length === 0 ? (
-                            <LeadsEmptyState mode="no-results" onClearFilters={clearFilters} />
-                        ) : viewMode === 'table' ? (
-                            <LeadsTable
-                                leads={leads}
-                                selected={selected}
-                                onSelect={handleSelect}
-                                onSelectAll={handleSelectAll}
-                                sortField={sortField}
-                                sortDir={sortDir}
-                                onSort={handleSort}
-                                onView={(l) => setActiveModal({ lead: l, mode: 'view' })}
-                                onEdit={(l) => setActiveModal({ lead: l, mode: 'edit' })}
-                                onDelete={handleDelete}
-                                visibleCols={visibleCols}
-                                page={page}
-                                perPage={perPage}
-                                totalLeads={totalLeads}
-                                onPageChange={setPage}
-                                onPerPageChange={(n) => { setPerPage(n); setPage(1) }}
-                            />
+                        ) : leads.length > 0 ? (
+                            viewMode === 'table' ? (
+                                <LeadsTable 
+                                    leads={leads} 
+                                    selectedItems={selectedLeads}
+                                    onSelectItems={setSelectedLeads}
+                                    onUpdate={() => fetchLeads()}
+                                />
+                            ) : (
+                                <div className="p-8">
+                                    <LeadsCards leads={leads} />
+                                </div>
+                            )
                         ) : (
-                            <LeadsCards
-                                leads={leads}
-                                onView={(l) => setActiveModal({ lead: l, mode: 'view' })}
-                                onEdit={(l) => setActiveModal({ lead: l, mode: 'edit' })}
-                                onDelete={handleDelete}
-                                page={page}
-                                perPage={perPage}
-                                totalLeads={totalLeads}
-                            />
+                            <div className="flex flex-col items-center justify-center py-32 px-6 text-center space-y-6">
+                                <div className="p-10 bg-slate-50 dark:bg-slate-800 rounded-full border-2 border-dashed border-slate-200 dark:border-slate-700">
+                                    <Users className="w-16 h-16 text-slate-300 dark:text-slate-600" />
+                                </div>
+                                <div className="space-y-2">
+                                    <h4 className="text-xl font-bold text-slate-800 dark:text-slate-100">Nenhum lead encontrado</h4>
+                                    <p className="text-slate-500 dark:text-slate-400 max-w-sm font-medium">Tente ajustar seus filtros ou inicie uma nova busca para capturar contatos.</p>
+                                </div>
+                                <button className="px-8 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl font-bold flex items-center gap-3 hover:scale-105 transition-transform">
+                                    <Search className="w-4 h-4" />
+                                    Ir para Busca
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
-            </div>
-
-            {/* Modal */}
-            {activeModal && (
-                <LeadModal
-                    lead={activeModal.lead}
-                    mode={activeModal.mode}
-                    onClose={() => setActiveModal(null)}
-                    onSave={handleSave}
-                />
-            )}
+            </main>
         </div>
     )
 }
