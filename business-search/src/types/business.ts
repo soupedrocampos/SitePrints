@@ -16,6 +16,10 @@ export interface Business {
     status_code?: number | null
     screenshot?: string | null
     links?: BusinessLink[]
+    source?: string
+    city?: string
+    state?: string
+    reviewCount?: number
 }
 
 export type BusinessType = 'Restaurante' | 'Hotel' | 'Varejo' | 'Serviços' | 'Saúde' | 'Educação' | 'Todos'
