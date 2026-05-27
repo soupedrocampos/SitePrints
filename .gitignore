@@ -21,3 +21,11 @@ dist-ssr/
 # OS
 .DS_Store
 Thumbs.db
+
+# Free scraper binary + transient files (install via setup_scraper.sh)
+google-maps-scraper-main/google-maps-scraper
+google-maps-scraper-main/google-maps-scraper.exe
+google-maps-scraper-main/temp_queries_*.txt
+google-maps-scraper-main/temp_results_*.csv
+google-maps-scraper-main/webdata/
+google-maps-scraper-main/cache/

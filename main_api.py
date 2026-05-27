@@ -83,19 +83,39 @@ class BusinessLink(BaseModel):
     url: str
 
 
+def _resolve_scraper_binary() -> Optional[str]:
+    """Locate the gosom/google-maps-scraper binary for the current platform.
+
+    Honors SCRAPER_BIN (full path) and SCRAPER_DIR (parent dir) env vars,
+    otherwise falls back to ./google-maps-scraper-main/ next to this file.
+    """
+    explicit = os.getenv("SCRAPER_BIN")
+    if explicit and os.path.exists(explicit):
+        return explicit
+
+    default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "google-maps-scraper-main")
+    scraper_dir = os.getenv("SCRAPER_DIR", default_dir)
+    candidates = ["google-maps-scraper", "google-maps-scraper.exe"]
+    for name in candidates:
+        path = os.path.join(scraper_dir, name)
+        if os.path.exists(path):
+            return path
+    return None
+
+
 async def run_free_scraper(queries: List[str], depth: int = 2) -> List['Business']:
     uid = str(uuid.uuid4())
     input_file = f"temp_queries_{uid}.txt"
     output_file = f"temp_results_{uid}.csv"
-    
-    # Use environment variable for portability, fallback to default relative path
-    default_scraper_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "google-maps-scraper-main")
-    scraper_dir = os.getenv("SCRAPER_DIR", default_scraper_dir)
-    scraper_exe = os.path.join(scraper_dir, "google-maps-scraper.exe")
-    
-    if not os.path.exists(scraper_exe):
-        logger.error(f"Free scraper exe NOT FOUND at: {scraper_exe}")
+
+    scraper_exe = _resolve_scraper_binary()
+    if not scraper_exe:
+        logger.error(
+            "Free scraper binary not found. Run google-maps-scraper-main/setup_scraper.sh "
+            "or set SCRAPER_BIN to the binary path."
+        )
         return []
+    scraper_dir = os.path.dirname(scraper_exe)
 
     logger.info(f"Running free scraper (depth={depth}) for queries: {queries}")
     
